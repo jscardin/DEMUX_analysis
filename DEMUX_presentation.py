@@ -6,7 +6,6 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 Fs2=50
 Nframe=64
 overlap=1/4
-OL=0.1
 Fc=-0
 anim_enable=False
 
@@ -26,7 +25,7 @@ Wtype_h=RadioButtons(axes([0.01,0.01,.1,0.1]),('RECT','BARTLETT','HANN'),active=
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
 L1InReal,=ax1.plot([],[],'y',lw=5,label='real(DEMUX input)')
-L1OutReal,=ax1.plot([],[],'b',lw=1,label='real(DEMUX output)')
+L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
 L1win=[]
 L1win.append(ax1.plot([],[],'r',lw=1,label='FFT blocks')[0])
 L1win.append(ax1.plot([],[],'r',lw=1)[0])
@@ -41,6 +40,7 @@ ax2=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='Freq Domain Tones')
 L2fftout,=ax2.plot([],[],lw=1,label='mag(FFT out)')
 L2fftoutreal,=ax2.plot([],[],lw=1,label='real(FFT out)')
 L2fftpoints,=ax2.plot([],[],'.',label='real(IFFT input)')
+L2fir,=ax2.plot([],[],label='FIR')
 ax2.legend()
 ax2.grid()
 ax2.set_xlabel('FREQ TONES')
@@ -59,67 +59,68 @@ class waveform():
         Nfft=int(2**Nfft_h.val)
         Nifft=Nfft//int(2**-Nifft_h.val)
         Nidft=int(round(Nidft_h.val*Nifft))
-        OL=int(Nfft*eval(OL_h.value_selected))
-        ov=[OL-Nfft,0,Nfft-OL]  #index of the center of the 3 FFT'self.s
+        OLfft=int(Nfft*eval(OL_h.value_selected))
+        OLifft=int(Nifft*eval(OL_h.value_selected))
+        ov=[OLfft-Nfft,0,Nfft-OLfft]  #index of the center of the 3 FFT's
         N=int(Nframe*Nifft*(1-overlap))
         N=Nfft*4
         t=arange(-N//2,N//2)
         if Stim_h.value_selected=='CW':
-            self.s=exp(1j*2*pi*Fc_h.val*Nifft/N*(t+Toff_h.val))
-            ss=self.s*(abs(Fc_h.val)<Nidft_h.val/2)
+            s=exp(1j*2*pi*Fc_h.val*Nifft/N*(t+Toff_h.val))
+            ss=s*(abs(Fc_h.val)<Nidft_h.val/2)
             
         else:
-            self.s=zeros(N)
-            self.s[int(Toff_h.val)+N//2]=Nifft/Nidft
-            ss=rfft(self.s)
+            s=zeros(N)
+            s[int(Toff_h.val)+N//2]=Nifft/Nidft
+            ss=rfft(s)
             ss[round(Nidft/Nifft*N/2):]=0
             ss=irfft(ss)
-
+        
         if Wtype_h.value_selected=='RECT':
             w=zeros(N)
-            w[arange(-(Nfft-OL)//2,(Nfft-OL)//2)+N//2]=1
+            w[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
         elif Wtype_h.value_selected=='BARTLETT': 
-            w=concatenate([zeros((N-Nfft)//2),linspace(0,1,OL,endpoint=False),ones(Nfft-2*OL),linspace(1,0,OL,endpoint=False),zeros((N-Nfft)//2)])
+            w=concatenate([zeros((N-Nfft)//2),linspace(0,1,OLfft,endpoint=False),ones(Nfft-2*OLfft),linspace(1,0,OLfft,endpoint=False),zeros((N-Nfft)//2)])
         elif Wtype_h.value_selected=='HANN': 
-            w=concatenate([zeros((N-Nfft)//2),cos(linspace(-pi,0,OL,endpoint=False))/2+0.5,ones(Nfft-2*OL),cos(linspace(0,pi,OL,endpoint=False))/2+0.5,zeros((N-Nfft)//2)])
-
+            w=concatenate([zeros((N-Nfft)//2),cos(linspace(-pi,0,OLfft,endpoint=False))/2+0.5,ones(Nfft-2*OLfft),cos(linspace(0,pi,OLfft,endpoint=False))/2+0.5,zeros((N-Nfft)//2)])
+        
         ww=zeros(N)
         for i in range(3):
             ww+=roll(w,ov[i])
             L1win[i].set_data(t+ov[i],w[t+N//2])
         L1InReal.set_data(t,real(ss)*ww)
         
-
-        s3=zeros(3*Nfft-2*OL,'complex')
-        f=arange(-Nifft,Nifft)
+        
+        s3=zeros(3*Nifft-2*OLifft,'complex')
+        f=arange(-Nifft//2,Nifft//2)
+        
+        FIR4=fftshift(irfft(concatenate([ones(5),zeros(12)])))*kaiser(32,5)
+        FIR4=fft(concatenate([FIR4[16:],zeros(Nifft-32),FIR4[:16]]))
+        #L2fir.set_data(f,real(fftshift(FIR4)))
         for i in range(3):
             if Wtype_h.value_selected=='RECT':
                 www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
-                S=fftshift(fft(fftshift(www*roll(self.s,-ov[i]))))
+                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))[f+N//2]
             else:
-                S=fftshift(fft(fftshift(w*roll(self.s,-ov[i]))))
-#            #S=roll(S,int(Fc_h.val*N/Nifft))
-#            #S=convolve(S,ones(int(OL*N)+1),'same')#/(int(OL*N)+1)
+                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))[f+N//2]
             if i==1: 
-                L2fftout.set_data(    f, abs(S[f+N//2])/Nfft)
-                L2fftoutreal.set_data(f,real(S[f+N//2])/Nfft)
-            S[:(N-Nidft)//2]=0
-            S[(N+Nidft)//2:]=0
-            if i==1: L2fftpoints.set_data(arange(-Nidft//2,Nidft//2),real(S[arange(-Nidft//2,Nidft//2)+N//2])/Nfft)
-#            print(len(S),Nifft,Nidft,len(w),Toff_h.val)
-            S=fftshift(ifft(fftshift(S)))
-#            #L1OutReal[i+1].set_data(arange(-Nifft//2,Nifft//2)+ov[i],real(SS))
+                L2fftout.set_data(    f, abs(S/Nfft))
+                L2fftoutreal.set_data(f,real(S/Nfft))
+            S[:(Nifft-Nidft)//2]=0
+            S[(Nifft+Nidft)//2:]=0
+            #S*=FIR4
+            if i==1: L2fftpoints.set_data(f,real(S)/Nfft)
+            S=fftshift(ifft(fftshift(S)))*Nifft/N
             if Wtype_h.value_selected=='RECT':                
-                s3[arange(Nfft-OL)+i*(Nfft-OL)+OL//2]+=S[arange(-(Nfft-OL)//2,(Nfft-OL)//2)+N//2]
+                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=S[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]
             else:
-                s3[arange(Nfft)+i*(Nfft-OL)]+=S[arange(-Nfft//2,Nfft//2)+N//2]
-        L1OutReal.set_data(arange(OL-(Nfft*3)//2,(Nfft*3)//2-OL),real(s3))
-        i=arange(-len(s3)//2,len(s3)//2)+N//2
-        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-ss[i]*ww[i])**2)/sum(abs(ww[i])**2))))
-        print(Nifft)
+                s3[arange(Nifft)+i*(Nifft-OLifft)]+=S
+        L1OutReal.set_data(arange(OLifft-(Nifft*3)//2,(Nifft*3)//2-OLifft)*N//Nifft,real(s3))
+        #i=arange(-len(s3)//2,len(s3)//2)+N//2
+        #textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-ss[i]*ww[i])**2)/sum(abs(ww[i])**2))))
         ax1.axis([-Nfft*2,Nfft*2,-1.5,1.5])
-        a=array([-Nfft*3//2+OL,-Nfft*3//2+2*OL,-Nfft*3//2+OL,-Nfft//2,-Nfft//2+OL])
-        ax1.set_xticks(concatenate([a,-a]))
+        a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
+        #ax1.set_xticks(concatenate([a,-a]))
         ax2.set_xticks([-Nifft//2,-Nidft//2,Nidft//2,Nifft//2])
         ax2.axis([-Nifft*0.6,Nifft*0.6,-1,2])
         fig.canvas.draw()
