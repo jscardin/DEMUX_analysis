@@ -9,9 +9,9 @@ os=4
 fig=figure(num=1,clear=True)
 
 Nfft_h=Slider(axes([0.01,0.3,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
-Nifft_h=Slider(axes([0.04,0.3,0.02,0.6]),'IFFT',-12,0,-6,'%d',valstep=1,orientation='vertical')
+Nifft_h=Slider(axes([0.04,0.3,0.02,0.6]),'IFFT',5,18,6,'%d',valstep=1,orientation='vertical')
 Nidft_h=Slider(axes([0.07,0.3,0.02,0.6]),'IDFT',0,1,0.5,'%0.2f',orientation='vertical')
-Fc_h=Slider(axes([0.1,0.3,0.02,0.6]),'Freq',-0.6,0.6,0,'%0.2f',orientation='vertical')
+Fc_h=Slider(axes([0.1,0.3,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
 Toff_h=Slider(axes([0.13,0.3,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
 Stim_h=RadioButtons(axes([0.11,0.01,.05,0.1]),('CW','Impulse'),active=0)
 OL_h=RadioButtons(axes([0.01,0.1,.1,0.1]),('1/2','1/4','1/8','0'),active=1)
@@ -19,12 +19,12 @@ Wtype_h=RadioButtons(axes([0.01,0.01,.1,0.1]),('RECT','BARTLETT','HANN'),active=
 
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
-L1InReal,=ax1.plot([],[],'y',lw=5,label='real(DEMUX input)')
-L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
 L1win=[]
 L1win.append(ax1.plot([],[],'r',lw=1,label='FFT blocks')[0])
 L1win.append(ax1.plot([],[],'r',lw=1)[0])
 L1win.append(ax1.plot([],[],'r',lw=1)[0])
+L1InReal,=ax1.plot([],[],'y',lw=4,label='real(Input Signal)')
+L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
 ax1.legend(loc='upper right')
 ax1.grid()
 ax1.set_xlabel('TIME SAMPLES')
@@ -32,10 +32,10 @@ ax1.set_xlabel('TIME SAMPLES')
 
 
 ax2=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='Freq Domain Tones')
-L2fftout,=ax2.plot([],[],lw=1,label='mag(FFT out)')
-L2fftoutreal,=ax2.plot([],[],lw=1,label='real(FFT out)')
-L2fftpoints,=ax2.plot([],[],'.',label='real(IFFT input)')
-L2fir,=ax2.plot([],[],label='FIR')
+#L2fftout,=ax2.plot([],[],lw=1,label='mag(FFT out)')
+L2fftoutreal,=ax2.plot([],[],'y',lw=4,label='real(Input Signal)')
+L2fftpoints,=ax2.plot([],[],'b.',label='real(IFFT input)')
+#L2fir,=ax2.plot([],[],label='FIR')
 ax2.legend()
 ax2.grid()
 ax2.set_xlabel('FREQ TONES')
@@ -52,7 +52,7 @@ class waveform():
 
     def calculate(self,a):
         Nfft=int(2**Nfft_h.val)
-        Nifft=Nfft//int(2**-Nifft_h.val)
+        Nifft=int(2**Nifft_h.val)
         Nidft=int(round(Nidft_h.val*Nifft))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
@@ -60,8 +60,8 @@ class waveform():
         N=Nfft*os
         t=arange(-N//2,N//2)
         if Stim_h.value_selected=='CW':
-            s=exp(1j*2*pi*Fc_h.val*Nifft/Nfft*(t+Toff_h.val))
-            ss=s*(abs(Fc_h.val)<Nidft_h.val/2)
+            s=exp(1j*2*pi*Fc_h.val/Nfft*(t+Toff_h.val))
+            ss=s*(abs(Fc_h.val)<Nidft/2)
             
         else:
             s=zeros(N)
@@ -96,7 +96,7 @@ class waveform():
             else:
                 S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/Nfft
             if i==1: 
-                L2fftout.set_data(    f/os, abs(S[f+N//2]))
+#                L2fftout.set_data(    f/os, abs(S[f+N//2]))
                 L2fftoutreal.set_data(f/os,real(S[f+N//2]))
             SS=zeros(Nifft,'complex')
             SS[ff+Nifft//2]=S[ff*os+N//2]
