@@ -9,11 +9,12 @@ os=4
 fig=figure(num=1,clear=True)
 
 Nfft_h=Slider(axes([0.01,0.3,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
-Nifft_h=Slider(axes([0.04,0.3,0.02,0.6]),'IFFT',5,18,6,'%d',valstep=1,orientation='vertical')
-Nidft_h=Slider(axes([0.07,0.3,0.02,0.6]),'IDFT',0,1,0.5,'%0.2f',orientation='vertical')
+Nifft_h=Slider(axes([0.03,0.3,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
+Nidft_h=Slider(axes([0.05,0.3,0.02,0.6]),'IDFT',0,1,0.5,'%0.2f',orientation='vertical')
+Nfir_h=Slider(axes([0.07,0.3,0.02,0.6]),'FIR',0,1,1,'%0.2f',orientation='vertical')
 Fc_h=Slider(axes([0.1,0.3,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
-Toff_h=Slider(axes([0.13,0.3,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
-Stim_h=RadioButtons(axes([0.11,0.01,.05,0.1]),('CW','Impulse'),active=0)
+Toff_h=Slider(axes([0.12,0.3,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
+RollOff_h=RadioButtons(axes([0.11,0.01,.05,0.1]),('0%','5%','20%','35%'),active=3)
 OL_h=RadioButtons(axes([0.01,0.1,.1,0.1]),('1/2','1/4','1/8','0'),active=1)
 Wtype_h=RadioButtons(axes([0.01,0.01,.1,0.1]),('RECT','BARTLETT','HANN'),active=0)
 
@@ -35,7 +36,7 @@ ax2=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='Freq Domain Tones')
 #L2fftout,=ax2.plot([],[],lw=1,label='mag(FFT out)')
 L2fftoutreal,=ax2.plot([],[],'y',lw=4,label='real(Input Signal)')
 L2fftpoints,=ax2.plot([],[],'b.',label='real(IFFT input)')
-#L2fir,=ax2.plot([],[],label='FIR')
+L2env,=ax2.plot([],[],'r',label='Channel Envelope')
 ax2.legend()
 ax2.grid()
 ax2.set_xlabel('FREQ TONES')
@@ -54,22 +55,21 @@ class waveform():
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
         Nidft=int(round(Nidft_h.val*Nifft))
+        Nfir=Nfir_h.val*Nifft
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
+        Fc=Fc_h.val*Nifft/160
+        ro=[a[0] for a in ((0,"0%"),(.05,"5%"),(.2,"20%"),(.35,"35%")) if a[1]==RollOff_h.value_selected][0]
         ov=[OLfft-Nfft,0,Nfft-OLfft]  #index of the center of the 3 FFT's
         N=Nfft*os
+        n=os*min(Nfir,Nidft)
+        Fir=concatenate([cos(linspace(-pi,0,round(n*ro/2)))/2+0.5,ones(int(round(n*(1-ro)))),cos(linspace(0,pi,round(n*ro/2)))/2+0.5])
+        Fenv=concatenate([Fir,Fir,Fir])
+        f=arange(len(Fenv))/os-len(Fenv)/2/os
+        L2env.set_data(f,Fenv)
         t=arange(-N//2,N//2)
-        if Stim_h.value_selected=='CW':
-            s=exp(1j*2*pi*Fc_h.val/Nfft*(t+Toff_h.val))
-            ss=s*(abs(Fc_h.val)<Nidft/2)
-            
-        else:
-            s=zeros(N)
-            s[int(Toff_h.val)+N//2]=Nifft/Nidft
-            ss=rfft(s)
-            ss[round(Nidft/Nifft*N/2):]=0
-            ss=irfft(ss)
-        
+        s=exp(1j*2*pi*Fc/Nfft*(t+Toff_h.val))*interp(Fc,f,Fenv)
+        ss=s*(abs(Fc)<min(Nidft,Nfir)/2)
         if Wtype_h.value_selected=='RECT':
             w=zeros(N)
             w[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
@@ -86,7 +86,7 @@ class waveform():
         
         
         s3=zeros(3*Nifft-2*OLifft,'complex')
-        f=arange(Nifft*os)-Nifft*os//2
+        f=arange(Nifft*os*2)-Nifft*os
         ff=arange(Nidft)-Nidft//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         for i in range(3):
@@ -94,19 +94,20 @@ class waveform():
                 www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
                 S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
             else:
-                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/Nfft
+                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/(Nfft-OLfft)
             if i==1: 
-#                L2fftout.set_data(    f/os, abs(S[f+N//2]))
+        #                L2fftout.set_data(    f/os, abs(S[f+N//2]))
                 L2fftoutreal.set_data(f/os,real(S[f+N//2]))
             SS=zeros(Nifft,'complex')
             SS[ff+Nifft//2]=S[ff*os+N//2]
             #S*=FIR4
             if i==1: L2fftpoints.set_data(ff,real(SS[ff+Nifft//2]))
-            ss=fftshift(ifft(fftshift(SS)))*Nifft
+            ss=fftshift(ifft(fftshift(SS)))
             if Wtype_h.value_selected=='RECT':                
-                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]
+                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*Nifft
             else:
-                s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss
+                s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
+        s3=convolve(s3,fftshift(ifft(fftshift(concatenate([zeros(int(len(Fir)*3/4)),Fir,zeros(int(len(Fir)*3/4))])))))
         L1OutReal.set_data((arange(len(s3))-len(s3)//2)*Nfft//Nifft,real(s3))
         #i=arange(-len(s3)//2,len(s3)//2)+N//2
         #textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-ss[i]*ww[i])**2)/sum(abs(ww[i])**2))))
@@ -114,7 +115,7 @@ class waveform():
         a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
         #ax1.set_xticks(concatenate([a,-a]))
         ax2.set_xticks([-Nifft//2,-Nidft//2,Nidft//2,Nifft//2])
-        ax2.axis([-Nifft*0.6,Nifft*0.6,-1,2])
+        ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
         fig.canvas.draw()
         #fig.canvas.flush_events()
         
@@ -128,6 +129,8 @@ Nifft_h.on_changed(wf.calculate)
 Nidft_h.on_changed(wf.calculate)
 Fc_h.on_changed(wf.calculate)
 Toff_h.on_changed(wf.calculate)
+Nfir_h.on_changed(wf.calculate)
+RollOff_h.on_clicked(wf.calculate)
 OL_h.on_clicked(wf.calculate)
 Wtype_h.on_clicked(wf.calculate)
 
