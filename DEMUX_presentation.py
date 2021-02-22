@@ -2,12 +2,7 @@ from pylab import *
 from matplotlib import animation
 from matplotlib.widgets import Slider, Button, RadioButtons
 
-
-Fs2=50
-Nframe=64
-overlap=1/4
-Fc=-0
-anim_enable=False
+os=4
 
 
 #fig,(a,ax1,ax2)=subplots(1,3,num=1,clear=True)
@@ -62,11 +57,10 @@ class waveform():
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
         ov=[OLfft-Nfft,0,Nfft-OLfft]  #index of the center of the 3 FFT's
-        N=int(Nframe*Nifft*(1-overlap))
-        N=Nfft*4
+        N=Nfft*os
         t=arange(-N//2,N//2)
         if Stim_h.value_selected=='CW':
-            s=exp(1j*2*pi*Fc_h.val*Nifft/N*(t+Toff_h.val))
+            s=exp(1j*2*pi*Fc_h.val*Nifft/Nfft*(t+Toff_h.val))
             ss=s*(abs(Fc_h.val)<Nidft_h.val/2)
             
         else:
@@ -92,30 +86,28 @@ class waveform():
         
         
         s3=zeros(3*Nifft-2*OLifft,'complex')
-        f=arange(-Nifft//2,Nifft//2)
-        
-        FIR4=fftshift(irfft(concatenate([ones(5),zeros(12)])))*kaiser(32,5)
-        FIR4=fft(concatenate([FIR4[16:],zeros(Nifft-32),FIR4[:16]]))
+        f=arange(Nifft*os)-Nifft*os//2
+        ff=arange(Nidft)-Nidft//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         for i in range(3):
             if Wtype_h.value_selected=='RECT':
                 www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
-                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))[f+N//2]
+                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
             else:
-                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))[f+N//2]
+                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/Nfft
             if i==1: 
-                L2fftout.set_data(    f, abs(S/Nfft))
-                L2fftoutreal.set_data(f,real(S/Nfft))
-            S[:(Nifft-Nidft)//2]=0
-            S[(Nifft+Nidft)//2:]=0
+                L2fftout.set_data(    f/os, abs(S[f+N//2]))
+                L2fftoutreal.set_data(f/os,real(S[f+N//2]))
+            SS=zeros(Nifft,'complex')
+            SS[ff+Nifft//2]=S[ff*os+N//2]
             #S*=FIR4
-            if i==1: L2fftpoints.set_data(f,real(S)/Nfft)
-            S=fftshift(ifft(fftshift(S)))*Nifft/N
+            if i==1: L2fftpoints.set_data(ff,real(SS[ff+Nifft//2]))
+            ss=fftshift(ifft(fftshift(SS)))*Nifft
             if Wtype_h.value_selected=='RECT':                
-                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=S[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]
+                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]
             else:
-                s3[arange(Nifft)+i*(Nifft-OLifft)]+=S
-        L1OutReal.set_data(arange(OLifft-(Nifft*3)//2,(Nifft*3)//2-OLifft)*N//Nifft,real(s3))
+                s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss
+        L1OutReal.set_data((arange(len(s3))-len(s3)//2)*Nfft//Nifft,real(s3))
         #i=arange(-len(s3)//2,len(s3)//2)+N//2
         #textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-ss[i]*ww[i])**2)/sum(abs(ww[i])**2))))
         ax1.axis([-Nfft*2,Nfft*2,-1.5,1.5])
