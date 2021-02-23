@@ -14,9 +14,11 @@ Nidft_h=Slider(axes([0.05,0.3,0.02,0.6]),'IDFT',0,1,0.5,'%0.2f',orientation='ver
 Nfir_h=Slider(axes([0.07,0.3,0.02,0.6]),'FIR',0,1,1,'%0.2f',orientation='vertical')
 Fc_h=Slider(axes([0.1,0.3,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
 Toff_h=Slider(axes([0.12,0.3,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
-RollOff_h=RadioButtons(axes([0.11,0.01,.05,0.1]),('0%','5%','20%','35%'),active=3)
-OL_h=RadioButtons(axes([0.01,0.1,.1,0.1]),('1/2','1/4','1/8','0'),active=1)
-Wtype_h=RadioButtons(axes([0.01,0.01,.1,0.1]),('RECT','BARTLETT','HANN'),active=0)
+RollOff_h=RadioButtons(axes([0.06,0.01,.05,0.1]),('0%','5%','20%','35%'),active=3)
+OLwin_h=RadioButtons(axes([0.01,0.11,.05,0.1]),('1/2','1/4','1/8','0'),active=1)
+OL_h=RadioButtons(axes([0.06,0.11,.05,0.1]),('1/2','1/4','1/8','0'),active=1)
+Wtype_h=RadioButtons(axes([0.01,0.01,.05,0.1]),('RECT','BARTLETT','HANN'),active=0)
+FIRlen=512
 
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
@@ -63,6 +65,7 @@ class waveform():
         Nifft=int(2**Nifft_h.val)
         Nidft=int(round(Nidft_h.val*Nifft))
         Nfir=Nfir_h.val*Nifft
+        OLwin=int(Nfft*eval(OLwin_h.value_selected))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
         Fc=Fc_h.val*Nifft/160
@@ -82,16 +85,21 @@ class waveform():
             w[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
         elif Wtype_h.value_selected=='BARTLETT': 
             w=concatenate([zeros((N-Nfft)//2),
-                           linspace(0,1,OLfft,endpoint=False),
-                           ones(Nfft-2*OLfft),
-                           linspace(1,0,OLfft,endpoint=False),
+                           linspace(0,1,OLwin,endpoint=False),
+                           ones(Nfft-2*OLwin),
+                           linspace(1,0,OLwin,endpoint=False),
                            zeros((N-Nfft)//2)])
         elif Wtype_h.value_selected=='HANN': 
-            w=rrc((N-Nfft)//2,OLfft,Nfft-2*OLfft)        
+            w=rrc((N-Nfft)//2,OLwin,Nfft-2*OLwin)        
+        if OLwin<OLfft:
+            www=zeros(N)
+            www[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
+        else:
+            www=w+0
         ww=zeros(N)
         for i in range(3):
-            ww+=roll(w,ov[i])
-            L1win[i].set_data(t+ov[i],w[t+N//2])
+            ww+=roll(www,ov[i])
+            L1win[i].set_data(t+ov[i],www[t+N//2])
         L1InReal.set_data(t,real(sr)*ww)
         
         
@@ -100,11 +108,14 @@ class waveform():
         ff=arange(Nidft)-Nidft//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         for i in range(3):
-            if Wtype_h.value_selected=='RECT':
-                www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
-                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
-            else:
-                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/(Nfft-OLfft)
+#            if Wtype_h.value_selected=='RECT':
+#                www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
+#                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
+#            else:
+#                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/(Nfft-OLfft)
+#
+            S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/(Nfft-OLwin)
+
             if i==1: 
         #                L2fftout.set_data(    f/os, abs(S[f+N//2]))
                 L2fftoutreal.set_data(f/os,real(S[f+N//2]))
@@ -113,11 +124,16 @@ class waveform():
             #S*=FIR4
             if i==1: L2fftpoints.set_data(ff,real(SS[ff+Nifft//2]))
             ss=fftshift(ifft(fftshift(SS)))
-            if Wtype_h.value_selected=='RECT':                
+            if Wtype_h.value_selected=='RECT' or OLwin<OLfft:                
                 s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*Nifft
             else:
                 s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
-        #s3=convolve(s3,fftshift(ifft(fftshift())))
+        if Nfir<Nidft:
+            a=rrc(round(FIRlen*(3-ro)/2/os),round(ro*FIRlen/os),round((1-ro)*FIRlen//os))
+            a=concatenate([zeros(os*Nifft//2-len(Fir)//2),Fir,zeros(os*Nifft//2-len(Fir)//2)])
+            print(len(s3),len(a))
+            s3=convolve(s3,fftshift(ifft(fftshift(a))),'same')
+            print(len(s3))
         L1OutReal.set_data((arange(len(s3))-len(s3)//2)*Nfft//Nifft,real(s3))
         i=arange(-len(s3)//2,len(s3)//2)*Nfft//Nifft+N//2
         textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-sr[i]*ww[i])**2)/sum(abs(ww[i])**2)+1e-20)))
