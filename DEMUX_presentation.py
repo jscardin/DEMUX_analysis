@@ -20,15 +20,22 @@ Wtype_h=RadioButtons(axes([0.01,0.01,.1,0.1]),('RECT','BARTLETT','HANN'),active=
 
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
+L1InReal,=ax1.plot([],[],'y',lw=4,label='real(Input Signal)')
+L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
 L1win=[]
 L1win.append(ax1.plot([],[],'r',lw=1,label='FFT blocks')[0])
 L1win.append(ax1.plot([],[],'r',lw=1)[0])
 L1win.append(ax1.plot([],[],'r',lw=1)[0])
-L1InReal,=ax1.plot([],[],'y',lw=4,label='real(Input Signal)')
-L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
 ax1.legend(loc='upper right')
 ax1.grid()
 ax1.set_xlabel('TIME SAMPLES')
+
+def rrc(N0,N01,N1):
+    return(concatenate([zeros(N0),
+                        cos(linspace(-pi,0,N01,endpoint=False))/2+0.5,
+                        ones(N1),
+                        cos(linspace(0,pi,N01,endpoint=False))/2+0.5,
+                        zeros(N0)]))
 
 
 
@@ -63,26 +70,29 @@ class waveform():
         ov=[OLfft-Nfft,0,Nfft-OLfft]  #index of the center of the 3 FFT's
         N=Nfft*os
         n=os*min(Nfir,Nidft)
-        Fir=concatenate([cos(linspace(-pi,0,round(n*ro/2)))/2+0.5,ones(int(round(n*(1-ro)))),cos(linspace(0,pi,round(n*ro/2)))/2+0.5])
+        Fir=rrc(0,int(round(n*ro/2)),int(round(n*(1-ro))))
         Fenv=concatenate([Fir,Fir,Fir])
         f=arange(len(Fenv))/os-len(Fenv)/2/os
         L2env.set_data(f,Fenv)
         t=arange(-N//2,N//2)
         s=exp(1j*2*pi*Fc/Nfft*(t+Toff_h.val))*interp(Fc,f,Fenv)
-        ss=s*(abs(Fc)<min(Nidft,Nfir)/2)
+        sr=s*(abs(Fc)<min(Nidft,Nfir)/2)
         if Wtype_h.value_selected=='RECT':
             w=zeros(N)
             w[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
         elif Wtype_h.value_selected=='BARTLETT': 
-            w=concatenate([zeros((N-Nfft)//2),linspace(0,1,OLfft,endpoint=False),ones(Nfft-2*OLfft),linspace(1,0,OLfft,endpoint=False),zeros((N-Nfft)//2)])
+            w=concatenate([zeros((N-Nfft)//2),
+                           linspace(0,1,OLfft,endpoint=False),
+                           ones(Nfft-2*OLfft),
+                           linspace(1,0,OLfft,endpoint=False),
+                           zeros((N-Nfft)//2)])
         elif Wtype_h.value_selected=='HANN': 
-            w=concatenate([zeros((N-Nfft)//2),cos(linspace(-pi,0,OLfft,endpoint=False))/2+0.5,ones(Nfft-2*OLfft),cos(linspace(0,pi,OLfft,endpoint=False))/2+0.5,zeros((N-Nfft)//2)])
-        
+            w=rrc((N-Nfft)//2,OLfft,Nfft-2*OLfft)        
         ww=zeros(N)
         for i in range(3):
             ww+=roll(w,ov[i])
             L1win[i].set_data(t+ov[i],w[t+N//2])
-        L1InReal.set_data(t,real(ss)*ww)
+        L1InReal.set_data(t,real(sr)*ww)
         
         
         s3=zeros(3*Nifft-2*OLifft,'complex')
@@ -107,10 +117,10 @@ class waveform():
                 s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*Nifft
             else:
                 s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
-        s3=convolve(s3,fftshift(ifft(fftshift(concatenate([zeros(int(len(Fir)*3/4)),Fir,zeros(int(len(Fir)*3/4))])))))
+        #s3=convolve(s3,fftshift(ifft(fftshift())))
         L1OutReal.set_data((arange(len(s3))-len(s3)//2)*Nfft//Nifft,real(s3))
-        #i=arange(-len(s3)//2,len(s3)//2)+N//2
-        #textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-ss[i]*ww[i])**2)/sum(abs(ww[i])**2))))
+        i=arange(-len(s3)//2,len(s3)//2)*Nfft//Nifft+N//2
+        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3-sr[i]*ww[i])**2)/sum(abs(ww[i])**2)+1e-20)))
         ax1.axis([-Nfft*2,Nfft*2,-1.5,1.5])
         a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
         #ax1.set_xticks(concatenate([a,-a]))
