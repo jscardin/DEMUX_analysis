@@ -14,10 +14,10 @@ Nidft_h=Slider(axes([0.05,0.3,0.02,0.6]),'IDFT',0,1,0.5,'%0.2f',orientation='ver
 Nfir_h=Slider(axes([0.07,0.3,0.02,0.6]),'FIR',0,1,1,'%0.2f',orientation='vertical')
 Fc_h=Slider(axes([0.1,0.3,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
 Toff_h=Slider(axes([0.12,0.3,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
-RollOff_h=RadioButtons(axes([0.06,0.01,.05,0.1]),('0%','5%','20%','35%'),active=3)
-OLwin_h=RadioButtons(axes([0.01,0.11,.05,0.1]),('1/2','1/4','1/8','0'),active=1)
-OL_h=RadioButtons(axes([0.06,0.11,.05,0.1]),('1/2','1/4','1/8','0'),active=1)
-Wtype_h=RadioButtons(axes([0.01,0.01,.05,0.1]),('RECT','BARTLETT','HANN'),active=0)
+RollOff_h=RadioButtons(axes([0.08,0.01,.07,0.1]),('0%','5%','20%','35%'),active=3)
+OLwin_h=RadioButtons(axes([0.01,0.11,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
+OL_h=RadioButtons(axes([0.08,0.11,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
+Wtype_h=RadioButtons(axes([0.01,0.01,.07,0.1]),('RECT','BARTLETT','HANN'),active=0)
 FIRlen=512
 
 
@@ -65,7 +65,7 @@ class waveform():
         Nifft=int(2**Nifft_h.val)
         Nidft=int(round(Nidft_h.val*Nifft))
         Nfir=Nfir_h.val*Nifft
-        OLwin=int(Nfft*eval(OLwin_h.value_selected))
+        OLwin=int(Nfft*eval(OL_h.value_selected))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
         Fc=Fc_h.val*Nifft/160
@@ -91,15 +91,10 @@ class waveform():
                            zeros((N-Nfft)//2)])
         elif Wtype_h.value_selected=='HANN': 
             w=rrc((N-Nfft)//2,OLwin,Nfft-2*OLwin)        
-        if OLwin<OLfft:
-            www=zeros(N)
-            www[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
-        else:
-            www=w+0
         ww=zeros(N)
         for i in range(3):
-            ww+=roll(www,ov[i])
-            L1win[i].set_data(t+ov[i],www[t+N//2])
+            ww+=roll(w,ov[i])
+            L1win[i].set_data(t+ov[i],w[t+N//2])
         L1InReal.set_data(t,real(sr)*ww)
         
         
@@ -108,13 +103,12 @@ class waveform():
         ff=arange(Nidft)-Nidft//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         for i in range(3):
-#            if Wtype_h.value_selected=='RECT':
-#                www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
-#                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
-#            else:
-#                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/(Nfft-OLfft)
-#
-            S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/(Nfft-OLwin)
+            if Wtype_h.value_selected=='RECT':
+                www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
+                S=fftshift(fft(fftshift(www*roll(s,-ov[i]))))/Nfft
+            else:
+                S=fftshift(fft(fftshift(w*roll(s,-ov[i]))))/(Nfft-OLfft)
+
 
             if i==1: 
         #                L2fftout.set_data(    f/os, abs(S[f+N//2]))
