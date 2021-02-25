@@ -2,7 +2,8 @@ from pylab import *
 from matplotlib import animation
 from matplotlib.widgets import Slider, Button, RadioButtons
 
-os=8
+os=8   # oversampling for the entire simulation
+span=7 # number of FFT frame, must be odd number
 
 def rrc(N0,N01,N1):
     return(concatenate([zeros(N0),
@@ -27,28 +28,24 @@ def RRC(N,FBW,alpha,beta=0):
 #fig,(a,ax1,ax2)=subplots(1,3,num=1,clear=True)
 fig=figure(num=1,clear=True)
 
-Nfft_h =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
-Nifft_h=Slider(axes([0.03,0.35,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
-Nbw_h  =Slider(axes([0.07,0.35,0.02,0.6]),'BW',0,1,0.25,'%0.2f',orientation='vertical')
-Fc_h   =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
-Toff_h =Slider(axes([0.12,0.35,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
-mode_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('IDFT','FIR'),active=0)
-RollOff_h=RadioButtons(axes([0.08,0.01,.07,0.1]),('0%','5%','20%','35%'),active=3)
-OLwin_h=RadioButtons(axes([0.01,0.11,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
-OL_h=RadioButtons(axes([0.08,0.11,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
-Wtype_h=RadioButtons(axes([0.01,0.01,.07,0.1]),('RECT','BARTLETT','HANN'),active=2)
+Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
+Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
+OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,4,2,'%0.2f',valstep=0.25,orientation='vertical')
+Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
+Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
+RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=3)
+OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
+Wtype_h  =RadioButtons(axes([0.01,0.01,.10,0.2]),('RECT OL discard','BARTLETT OL add','HANN OL add','HANN OL discard'),active=2)
+mode_h   =RadioButtons(axes([0.11,0.01,.05,0.1]),('IDFT','FIR'),active=0)
 FIRlen=512
 
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
 L1InReal,=ax1.plot([],[],'y.-',lw=1,label='real(Input Signal)')
 L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
-L1win=[]
-L1win.append(ax1.plot([],[],'r',lw=1,label='FFT blocks')[0])
-L1win.append(ax1.plot([],[],'r',lw=1)[0])
-L1win.append(ax1.plot([],[],'r',lw=1)[0])
-L1win.append(ax1.plot([],[],'r',lw=1)[0])
-L1win.append(ax1.plot([],[],'r',lw=1)[0])
+L1win=[ax1.plot([],[],'r',lw=1,label='FFT blocks')[0]]
+for i in range(span-1):
+    L1win.append(ax1.plot([],[],'r',lw=1)[0])
 ax1.legend(loc='upper right')
 ax1.grid()
 ax1.set_xlabel('IFFT TIME SAMPLES')
@@ -75,62 +72,63 @@ class waveform():
     def calculate(self,a):
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
-        Nbw=Nbw_h.val*Nifft
+        Nbw=Nifft/OS_h.val
         OLwin=int(Nfft*eval(OL_h.value_selected))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
+        if 'discard' in Wtype_h.value_selected: OLwin//=2
         Fc=Fc_h.val*Nifft/160
         ro=[a[0] for a in ((0,"0%"),(.05,"5%"),(.2,"20%"),(.35,"35%")) if a[1]==RollOff_h.value_selected][0]
         N=Nfft*os
         Fir=rrc(0,int(round(os*Nbw*ro/2)),int(round(os*Nbw*(1-ro))))
-        Fenv=concatenate([Fir,Fir,Fir,Fir,Fir,[0]])
+        Fenv=concatenate([tile(Fir,span),[0]])
         f=arange(len(Fenv))/os-(len(Fenv)-1)/2/os
         L2env.set_data(f,Fenv)
         t=arange(-N//2,N//2)
         s=exp(1j*2*pi*Fc/Nfft*(t+Toff_h.val))*interp(Fc,f,Fenv)
-        if Wtype_h.value_selected=='RECT':
-            w=zeros(N)
-            w[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+N//2]=1
-        elif Wtype_h.value_selected=='BARTLETT': 
+        if 'RECT' in Wtype_h.value_selected:
+            w=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
+            wo=concatenate([zeros((N-Nfft+OLfft)//2),ones(Nfft-OLfft),zeros((N-Nfft+OLfft)//2)])
+        elif 'BARTLETT' in Wtype_h.value_selected: 
             w=concatenate([zeros((N-Nfft)//2),
                            linspace(0,1,OLwin,endpoint=False),
                            ones(Nfft-2*OLwin),
                            linspace(1,0,OLwin,endpoint=False),
                            zeros((N-Nfft)//2)])
-        elif Wtype_h.value_selected=='HANN': 
-            w=rrc((N-Nfft)//2,OLwin,Nfft-2*OLwin)        
+            wo=w
+        elif 'HANN' in Wtype_h.value_selected: 
+            w=rrc((N-Nfft)//2,OLwin,Nfft-2*OLwin)
+            wo=w
         
         
-        s3=zeros(5*Nifft-4*OLifft,'complex')
+        s3=zeros(span*Nifft-(span-1)*OLifft,'complex')
         f=arange(min(Nfft,Nifft*2)*os)-min(Nfft,Nifft*2)*os//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         ww=zeros(N)
-        for i in [-2,-1,0,1,2]:
-            ov=i*(Nfft-OLfft)
-            ww+=roll(w,ov)
-            L1win[i+2].set_data((t+ov)*Nifft/Nfft,w[t+N//2])
-            if Wtype_h.value_selected=='RECT':
-                www=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
-                S=fftshift(fft(fftshift(www*roll(s,-ov))))/Nfft
-            else:
-                S=fftshift(fft(fftshift(w*roll(s,-ov))))/(Nfft-OLfft)
-            if i==0: L2fftoutreal.set_data(f/os,real(S[f+N//2]))
+        for i in range(span):
+            ov=(i-span//2)*(Nfft-OLfft)
+            L1win[i].set_data((t+ov)*Nifft/Nfft,wo[t+N//2])
+            S=fftshift(fft(fftshift(w*roll(s,-ov))))/(Nfft-OLwin)
+            if i==span//2: L2fftoutreal.set_data(f/os,real(S[f+N//2]))
             if mode_h.value_selected=="IDFT":
                 n=int(round(Nbw/2)*2)
                 SS=S[arange(-n//2,n//2)*os+N//2]
             else:
                 SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]
-            if i==0: L2fftpoints.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
+            if i==span//2: L2fftpoints.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
             ss=concatenate([zeros(Nifft//2-len(SS)//2),SS,zeros(Nifft//2-len(SS)//2)])
             ss=fftshift(ifft(fftshift(ss)))
-            if Wtype_h.value_selected=='RECT':                
-                s3[arange(Nifft-OLifft)+(i+2)*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*Nifft
-            else:
-                s3[arange(Nifft)+(i+2)*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
 
+            if 'discard' in Wtype_h.value_selected:
+                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*(Nifft-OLifft/2)
+                ww[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+ov+N//2]=1
+            else:
+                s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
+                ww+=roll(wo,ov)
+        
         if mode_h.value_selected=="FIR":
             s3=roll(convolve(s3,RRC(FIRlen,Nbw/Nifft,ro,2),'same'),-1)
-
+        
         sr=s*(abs(Fc)<Nbw/2)*ww
         L1InReal.set_data(t*Nifft/Nfft,real(sr))
         L1OutReal.set_data(arange(len(s3))-len(s3)//2,real(s3))
@@ -154,7 +152,7 @@ Nfft_h.on_changed(wf.calculate)
 Nifft_h.on_changed(wf.calculate)
 Fc_h.on_changed(wf.calculate)
 Toff_h.on_changed(wf.calculate)
-Nbw_h.on_changed(wf.calculate)
+OS_h.on_changed(wf.calculate)
 RollOff_h.on_clicked(wf.calculate)
 OL_h.on_clicked(wf.calculate)
 Wtype_h.on_clicked(wf.calculate)
