@@ -4,11 +4,10 @@ from pylab import *
 
 fig=figure(num=1,clear=True)
 
-Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
 Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,16,7,'%d',valstep=1,orientation='vertical')
 OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,4,2,'%0.2f',valstep=0.05,orientation='vertical')
-Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
-Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-1,1,0,'%d',orientation='vertical',valstep=1)
+#Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
+Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-1,1,0,'%d',orientation='vertical')
 # RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
 # OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
 # Wtype_h  =RadioButtons(axes([0.01,0.01,.10,0.2]),('RECT OL discard','BARTLETT OL add','HANN OL add','HANN OL discard'),active=2)
@@ -16,8 +15,8 @@ Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-1,1,0,'%d',orientation
 
 
 
-axf=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='Freq Domain Tones')
-axt=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
+axt=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='DEMUX IMPULSE RESPONSE')
+axf=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='DEMUX FREQ RESPONSE')
 
 L1finite,=axt.plot([],[],'.-',lw=1,label='Impulse response finite')
 L1infini,=axt.plot([],[],'.-',lw=1,label='Impulse response infinite')
@@ -59,8 +58,8 @@ class waveform():
         axf.axis([-Nifft//2,Nifft//2,-40,5])
         fig.canvas.draw()
         #fig.canvas.flush_events()
-        def rrc(N0,N01,N1):
-    return(concatenate([zeros(N0),
+    def rrc(N0,N01,N1):
+        return(concatenate([zeros(N0),
                         cos(linspace(-pi,0,N01,endpoint=False))/2+0.5,
                         ones(N1),
                         cos(linspace(0,pi,N01,endpoint=False))/2+0.5,
@@ -69,9 +68,9 @@ class waveform():
 
 wf=waveform()
 
-Nfft_h.on_changed(wf.calculate)
+#Nfft_h.on_changed(wf.calculate)
 Nifft_h.on_changed(wf.calculate)
-Fc_h.on_changed(wf.calculate)
+#Fc_h.on_changed(wf.calculate)
 Toff_h.on_changed(wf.calculate)
 OS_h.on_changed(wf.calculate)
 #RollOff_h.on_clicked(wf.calculate)
