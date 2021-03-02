@@ -49,8 +49,7 @@ class waveform():
         Hf[:self.BW//2*16+1]=1
         hf=irfft(Hf)
         hf=roll(hf,R)
-        Hf=fft(hf)
-        
+        Hf=fft(hf)      
         
         hh=concatenate([zeros(N//2-Nifft//2),h,zeros(N//2-Nifft//2)])
         
