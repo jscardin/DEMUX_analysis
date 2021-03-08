@@ -82,6 +82,7 @@ class waveform():
         N=Nfft*os
         Fir=rrc(0,int(round(os*Nbw*ro/2)),int(round(os*Nbw*(1-ro))))
         Fenv=concatenate([tile(Fir,span),[0]])
+        print('Fenv=%d'%len(Fenv))
         f=arange(len(Fenv))/os-(len(Fenv)-1)/2/os
         L2env.set_data(f,Fenv)
         t=arange(-N//2,N//2)

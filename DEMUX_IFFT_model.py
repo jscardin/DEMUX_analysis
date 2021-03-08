@@ -1,3 +1,4 @@
+from scipy import signal
 
 
 from pylab import *
