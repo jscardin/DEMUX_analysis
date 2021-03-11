@@ -23,7 +23,7 @@ def RRC(N,FBW,alpha,beta=0):
     return(h)
 
 
-
+fig2,ax=subplots(1,num=2,clear=True)
 
 #fig,(a,ax1,ax2)=subplots(1,3,num=1,clear=True)
 fig=figure(num=1,clear=True)
@@ -102,7 +102,7 @@ class waveform():
             wo=w
         
         
-        s3=zeros(span*Nifft-(span-1)*OLifft,'complex')
+        self.s3=zeros(span*Nifft-(span-1)*OLifft,'complex')
         f=arange(min(Nfft,Nifft*2)*os)-min(Nfft,Nifft*2)*os//2
         #L2fir.set_data(f,real(fftshift(FIR4)))
         ww=zeros(N)
@@ -121,21 +121,21 @@ class waveform():
             ss=fftshift(ifft(fftshift(ss)))
 
             if 'discard' in Wtype_h.value_selected:
-                s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*(Nifft-OLifft/2)
+                self.s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*(Nifft-OLifft/2)
                 ww[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+ov+N//2]=1
             else:
-                s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
+                self.s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
                 ww+=roll(wo,ov)
         
         if mode_h.value_selected=="FIR":
-            s3=roll(convolve(s3,RRC(FIRlen,Nbw/Nifft,ro,2),'same'),-1)
+            self.s3=roll(convolve(self.s3,RRC(FIRlen,Nbw/Nifft,ro,2),'same'),-1)
         
         sr=s*(abs(Fc)<Nbw/2)*ww
         L1InReal.set_data(t*Nifft/Nfft,real(sr))
-        L1OutReal.set_data(arange(len(s3))-len(s3)//2,real(s3))
+        L1OutReal.set_data(arange(len(self.s3))-len(self.s3)//2,real(self.s3))
         i=arange(-Nifft//2,Nifft//2)*Nfft//Nifft+N//2
-        j=arange(-Nifft//2,Nifft//2)+len(s3)//2
-        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(s3[j]-sr[i])**2)/sum(abs(ww[i])**2)+1e-20)))
+        j=arange(-Nifft//2,Nifft//2)+len(self.s3)//2
+        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(self.s3[j]-sr[i])**2)/sum(abs(ww[i])**2)+1e-20)))
         ax1.axis([-Nifft*2.2,Nifft*2.2,-1.5,1.5])
         #a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
         #ax1.set_xticks(concatenate([a,-a]))
