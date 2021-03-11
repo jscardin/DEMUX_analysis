@@ -3,6 +3,7 @@ from matplotlib import animation
 from matplotlib.widgets import Slider, Button, RadioButtons
 
 os=8   # oversampling for the entire simulation
+OSfin=4  #final oversampling
 span=7 # number of FFT frame, must be odd number
 
 def rrc(N0,N01,N1):
@@ -30,7 +31,7 @@ fig=figure(num=1,clear=True)
 
 Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
 Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
-OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,4,2,'%0.2f',valstep=0.25,orientation='vertical')
+OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,OSfin,2,'%0.2f',valstep=0.25,orientation='vertical')
 Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
 Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
 RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
@@ -72,7 +73,7 @@ class waveform():
     def calculate(self,a):
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
-        Nbw=Nifft/OS_h.val
+        self.Nbw=Nifft/OS_h.val
         OLwin=int(Nfft*eval(OL_h.value_selected))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
@@ -80,7 +81,7 @@ class waveform():
         Fc=Fc_h.val*Nifft/160
         ro=[a[0] for a in ((0,"0%"),(.05,"5%"),(.2,"20%"),(.35,"35%")) if a[1]==RollOff_h.value_selected][0]
         N=Nfft*os
-        Fir=rrc(0,int(round(os*Nbw*ro/2)),int(round(os*Nbw*(1-ro))))
+        Fir=rrc(0,int(round(os*self.Nbw*ro/2)),int(round(os*self.Nbw*(1-ro))))
         Fenv=concatenate([tile(Fir,span),[0]])
         print('Fenv=%d'%len(Fenv))
         f=arange(len(Fenv))/os-(len(Fenv)-1)/2/os
@@ -111,11 +112,11 @@ class waveform():
             L1win[i].set_data((t+ov)*Nifft/Nfft,wo[t+N//2])
             S=fftshift(fft(fftshift(w*roll(s,-ov))))/(Nfft-OLwin)
             if i==span//2: L2fftoutreal.set_data(f/os,real(S[f+N//2]))
-            if mode_h.value_selected=="IDFT":
-                n=int(round(Nbw/2)*2)
-                SS=S[arange(-n//2,n//2)*os+N//2]
-            else:
+            if mode_h.value_selected=="FIR":
                 SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]
+            else:
+                n=int(round(self.Nbw/2)*2)
+                SS=S[arange(-n//2,n//2)*os+N//2]
             if i==span//2: L2fftpoints.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
             ss=concatenate([zeros(Nifft//2-len(SS)//2),SS,zeros(Nifft//2-len(SS)//2)])
             ss=fftshift(ifft(fftshift(ss)))
@@ -128,9 +129,12 @@ class waveform():
                 ww+=roll(wo,ov)
         
         if mode_h.value_selected=="FIR":
-            self.s3=roll(convolve(self.s3,RRC(FIRlen,Nbw/Nifft,ro,2),'same'),-1)
+            self.s3=roll(convolve(self.s3,RRC(FIRlen,self.Nbw/Nifft,ro,2),'same'),-1)
+        else:
+            self.s4=interp(linspace(-len(self.s3)//2,len(self.s3)//2,OSfin/))
+            pass
         
-        sr=s*(abs(Fc)<Nbw/2)*ww
+        sr=s*(abs(Fc)<self.Nbw/2)*ww
         L1InReal.set_data(t*Nifft/Nfft,real(sr))
         L1OutReal.set_data(arange(len(self.s3))-len(self.s3)//2,real(self.s3))
         i=arange(-Nifft//2,Nifft//2)*Nfft//Nifft+N//2
@@ -139,7 +143,7 @@ class waveform():
         ax1.axis([-Nifft*2.2,Nifft*2.2,-1.5,1.5])
         #a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
         #ax1.set_xticks(concatenate([a,-a]))
-        ax2.set_xticks([-Nifft//2,-Nbw/2,Nbw/2,Nifft//2])
+        ax2.set_xticks([-Nifft//2,-self.Nbw/2,self.Nbw/2,Nifft//2])
         ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
         fig.canvas.draw()
         #fig.canvas.flush_events()
