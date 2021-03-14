@@ -18,13 +18,21 @@ def RRC(N,FBW,alpha,beta=0):
     NN=N*8
     n=int(round(NN/2*FBW))
     z=int(round(n/2*alpha))
-    H=concatenate([ones(n-z),sqrt((cos(linspace(0,pi,2*z,endpoint=False))+1)/2),zeros(NN//2+1-n-z)])
+    H=concatenate([ones(n-z),(sqrt(cos(linspace(0,pi,2*z,endpoint=False))+1)/2),zeros(NN//2+1-n-z)])
     h=irfft(H)
-    h=concatenate([h[-N//2:],h[:N//2]])*kaiser(N,beta)
+    h=concatenate([h[-N//2:],h[:N//2]])#*kaiser(N,beta)
     return(h)
 
+def interpFIR(u,d,n):
+    far=lambda mu:array([mu*(-0.5+mu/2),-mu/2-mu**2/2+1,mu*(1.5-mu/2),-mu/2+mu**2/2])
+    fir=reshape(list(zip(*[far(i/u) for i in range(u,0,-1)])),[-1])
+    FIR=fft(fftshift(concatenate([zeros(n*u//2-len(fir)//2),fir,zeros(n*u//2-len(fir)//2)])))
+    FIRds=real(concatenate([FIR[-n*u//d//2:],FIR[:n*u//d//2]]))/u
+    f=linspace(-u/d/2,u/d/2,n*u//d)
+    return(f,FIRds)
 
-fig2,ax=subplots(1,num=2,clear=True)
+
+#fig2,ax=subplots(1,num=2,clear=True)
 
 #fig,(a,ax1,ax2)=subplots(1,3,num=1,clear=True)
 fig=figure(num=1,clear=True)
@@ -42,20 +50,21 @@ FIRlen=512
 
 
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
-L1InReal,=ax1.plot([],[],'y.-',lw=1,label='real(Input Signal)')
-L1OutReal,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
-L1win=[ax1.plot([],[],'r',lw=1,label='FFT blocks')[0]]
+L1a,=ax1.plot([],[],'y.-',lw=1,label='real(Input Signal)')
+L1b,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
+L1c=[ax1.plot([],[],'r',lw=1,label='FFT blocks')[0]]
 for i in range(span-1):
-    L1win.append(ax1.plot([],[],'r',lw=1)[0])
+    L1c.append(ax1.plot([],[],'r',lw=1)[0])
 ax1.legend(loc='upper right')
 ax1.grid()
 ax1.set_xlabel('IFFT TIME SAMPLES')
 
 
 ax2=subplot2grid((8,10),(5,1),rowspan=3,colspan=9,title='Freq Domain Tones')
-L2fftoutreal,=ax2.plot([],[],'y',lw=4,label='real(Input Signal)')
-L2fftpoints,=ax2.plot([],[],'b.',label='real(IFFT input)')
-L2env,=ax2.plot([],[],'r',label='Channel Envelope')
+L2a,=ax2.plot([],[],'y',lw=4,label='real(Input Signal)')
+L2b,=ax2.plot([],[],'b.',label='real(IFFT input)')
+L2c,=ax2.plot([],[],'r',label='Channel Envelope')
+L2d,=ax2.plot([],[],'o',label='Interpolator Freq resp')
 ax2.legend()
 ax2.grid()
 ax2.set_xlabel('IFFT FREQ TONES')
@@ -67,13 +76,15 @@ textMER=ax1.text(0,-1.5,'asdf')
 
 class waveform():
     def __init__(self):
-        self.calculate(1)
+        self.button_pressed(7)
+        pass
 
-
-    def calculate(self,a):
+    def calculate(self,event):
+        print('event',event)
+        #______ Extracting variables
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
-        self.Nbw=Nifft/OS_h.val
+        Nbw=Nifft/OS_h.val
         OLwin=int(Nfft*eval(OL_h.value_selected))
         OLfft=int(Nfft*eval(OL_h.value_selected))
         OLifft=int(Nifft*eval(OL_h.value_selected))
@@ -81,13 +92,15 @@ class waveform():
         Fc=Fc_h.val*Nifft/160
         ro=[a[0] for a in ((0,"0%"),(.05,"5%"),(.2,"20%"),(.35,"35%")) if a[1]==RollOff_h.value_selected][0]
         N=Nfft*os
-        Fir=rrc(0,int(round(os*self.Nbw*ro/2)),int(round(os*self.Nbw*(1-ro))))
+        #______ Creating Frequency envelope
+        Fir=rrc(0,int(round(os*Nbw*ro/2)),int(round(os*Nbw*(1-ro))))
         Fenv=concatenate([tile(Fir,span),[0]])
-        print('Fenv=%d'%len(Fenv))
         f=arange(len(Fenv))/os-(len(Fenv)-1)/2/os
-        L2env.set_data(f,Fenv)
+        L2c.set_data(f,Fenv)
+        #______ Creating main signal (s)
         t=arange(-N//2,N//2)
         s=exp(1j*2*pi*Fc/Nfft*(t+Toff_h.val))*interp(Fc,f,Fenv)
+        #______ Creating windows w: pre-FFT window wo: time envelope window 
         if 'RECT' in Wtype_h.value_selected:
             w=concatenate([zeros((N-Nfft)//2),ones(Nfft),zeros((N-Nfft)//2)])
             wo=concatenate([zeros((N-Nfft+OLfft)//2),ones(Nfft-OLfft),zeros((N-Nfft+OLfft)//2)])
@@ -101,60 +114,75 @@ class waveform():
         elif 'HANN' in Wtype_h.value_selected: 
             w=rrc((N-Nfft)//2,OLwin,Nfft-2*OLwin)
             wo=w
-        
-        
+        #______ Create overlapping FFT's s3        
         self.s3=zeros(span*Nifft-(span-1)*OLifft,'complex')
         f=arange(min(Nfft,Nifft*2)*os)-min(Nfft,Nifft*2)*os//2
-        #L2fir.set_data(f,real(fftshift(FIR4)))
-        ww=zeros(N)
+        self.ww=zeros(N)
         for i in range(span):
-            ov=(i-span//2)*(Nfft-OLfft)
-            L1win[i].set_data((t+ov)*Nifft/Nfft,wo[t+N//2])
-            S=fftshift(fft(fftshift(w*roll(s,-ov))))/(Nfft-OLwin)
-            if i==span//2: L2fftoutreal.set_data(f/os,real(S[f+N//2]))
-            if mode_h.value_selected=="FIR":
+            offset=(i-span//2)*(Nfft-OLfft)
+            L1c[i].set_data((t+offset)*Nifft/Nfft,wo[t+N//2])
+            S=fftshift(fft(fftshift(w*roll(s,-offset))))/(Nfft-OLwin)
+            if mode_h.value_selected=="FIR": #Select whole range
                 SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]
-            else:
-                n=int(round(self.Nbw/2)*2)
+            else: # select center BW only, fill with zeros outside
+                n=int(round(Nbw/2)*2)
                 SS=S[arange(-n//2,n//2)*os+N//2]
-            if i==span//2: L2fftpoints.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
+            if i==span//2: # plot Frequency domain if center FFT
+                L2a.set_data(f/os,real(S[f+N//2]))
+                L2b.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
             ss=concatenate([zeros(Nifft//2-len(SS)//2),SS,zeros(Nifft//2-len(SS)//2)])
             ss=fftshift(ifft(fftshift(ss)))
-
+            #______ overlap and discard or add
             if 'discard' in Wtype_h.value_selected:
                 self.s3[arange(Nifft-OLifft)+i*(Nifft-OLifft)+OLifft//2]+=ss[arange(-(Nifft-OLifft)//2,(Nifft-OLifft)//2)+Nifft//2]*(Nifft-OLifft/2)
-                ww[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+ov+N//2]=1
+                self.ww[arange(-(Nfft-OLfft)//2,(Nfft-OLfft)//2)+offset+N//2]=1
             else:
                 self.s3[arange(Nifft)+i*(Nifft-OLifft)]+=ss*(Nifft-OLifft)
-                ww+=roll(wo,ov)
-        
-        if mode_h.value_selected=="FIR":
-            self.s3=roll(convolve(self.s3,RRC(FIRlen,self.Nbw/Nifft,ro,2),'same'),-1)
-        else:
-            self.s4=interp(linspace(-len(self.s3)//2,len(self.s3)//2,OSfin/))
-            pass
-        
-        sr=s*(abs(Fc)<self.Nbw/2)*ww
-        L1InReal.set_data(t*Nifft/Nfft,real(sr))
-        L1OutReal.set_data(arange(len(self.s3))-len(self.s3)//2,real(self.s3))
-        i=arange(-Nifft//2,Nifft//2)*Nfft//Nifft+N//2
-        j=arange(-Nifft//2,Nifft//2)+len(self.s3)//2
-        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(self.s3[j]-sr[i])**2)/sum(abs(ww[i])**2)+1e-20)))
-        ax1.axis([-Nifft*2.2,Nifft*2.2,-1.5,1.5])
-        #a=array([-Nfft*3//2+OLifft,-Nfft*3//2+2*OLifft,-Nfft*3//2+OLifft,-Nfft//2,-Nfft//2+OLifft])
-        #ax1.set_xticks(concatenate([a,-a]))
-        ax2.set_xticks([-Nifft//2,-self.Nbw/2,self.Nbw/2,Nifft//2])
+                self.ww+=roll(wo,offset)
+ 
+        #______ Filter and interpolator
+        t4=arange(0,len(self.s3),(Nifft/Nbw)/OSfin)       
+        if mode_h.value_selected=="FIR": #filter first then oversample
+            self.s3=self.RRCfilter(self.s3,Nbw/Nifft,ro)
+            self.s4=self.RateConverter(t4,self.s3)
+        else: #oversample first then filter
+            self.s4=self.RateConverter(t4,self.s3)
+            self.s4=self.RRCfilter(self.s4,1/OSfin,ro)
+        t4=t4-len(self.s3)//2
+        L1b.set_data(t4,real(self.s4))
+        #______ Creating reference signal (sr4)
+        sr=s*(abs(Fc)<Nbw/2)*self.ww
+        i=(span*Nfft- (span-1)*OLfft)
+        j=(span*Nifft-(span-1)*OLifft)
+        self.sr4=interp(linspace(-i//2,i//2,len(self.s4),endpoint=False),arange(-Nfft*os//2,Nfft*os//2),sr)
+        L1a.set_data(linspace(-j//2,j//2,len(self.sr4),endpoint=False),real(self.sr4))
+        #______ Calculating MER
+        textMER.set_text('MER est.=%0.1f'%(10*log10(sum(abs(self.s4-self.sr4)**2)/sum(abs(self.sr4)**2)+1e-20)))
+        #______ Plotting config
+        ax2.set_xticks([-Nifft//2,-Nbw/2,Nbw/2,Nifft//2])
         ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
         fig.canvas.draw()
         #fig.canvas.flush_events()
-        
+
+    def RateConverter(self,t,s):
+            return(interp(t,arange(len(s)),s))
+    def RRCfilter(self,s,bw,ro):
+            n=len(s)//2
+            ss=roll(convolve(s,RRC(FIRlen,bw,ro,2),'same'),-1)
+            return(ss[-n+len(ss)//2:n+len(ss)//2]) #extract center part only if FIR too long
+    def button_pressed(self,Nifft):
+        ax1.axis([-2**Nifft*os//2,2**Nifft*os//2,-1.5,1.5])
+        fig.canvas.toolbar.update()
+        self.calculate(0)
 
 wf=waveform()
 
-fig.canvas.toolbar.update()
+
+#fig.canvas.mpl_connect('button_press_event',wf.button_pressed)
+
 
 Nfft_h.on_changed(wf.calculate)
-Nifft_h.on_changed(wf.calculate)
+Nifft_h.on_changed(wf.button_pressed)
 Fc_h.on_changed(wf.calculate)
 Toff_h.on_changed(wf.calculate)
 OS_h.on_changed(wf.calculate)
@@ -163,3 +191,4 @@ OL_h.on_clicked(wf.calculate)
 Wtype_h.on_clicked(wf.calculate)
 mode_h.on_clicked(wf.calculate)
 
+show()
