@@ -78,14 +78,16 @@ textMER=ax1.text(0,-1.5,'asdf')
 
 class waveform():
     def __init__(self):
-        self.button_pressed(7)
-        pass
+        self.plotEn=True
 
     def SweepFreq(self,a):
-        self.calculate(Fc_h.val)
+        self.plotEn=False
+        for f in arange(-100,100):
+            print(self.calculate(f))
+        self.plotEn=True
+
 
     def calculate(self,Fcs):
-        plotEn=True
         #______ Extracting variables
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
@@ -124,14 +126,14 @@ class waveform():
         self.ww=zeros(N)
         for i in range(span):
             offset=(i-span//2)*(Nfft-OLfft)
-            if plotEn:  L1c[i].set_data((t+offset)*Nifft/Nfft,wo[t+N//2])
+            if self.plotEn:  L1c[i].set_data((t+offset)*Nifft/Nfft,wo[t+N//2])
             S=fftshift(fft(fftshift(w*roll(s,-offset))))/(Nfft-OLwin)
             if mode_h.value_selected=="FIR": #Select whole range
                 SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]
             else: # select center BW only, fill with zeros outside
                 n=int(round(Nbw/2)*2)
                 SS=S[arange(-n//2,n//2)*os+N//2]
-            if i==span//2 and plotEn: # plot Frequency domain if center FFT
+            if i==span//2 and self.plotEn: # plot Frequency domain if center FFT
                 L2a.set_data(f/os,real(S[f+N//2]))
                 L2b.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
             ss=concatenate([zeros(Nifft//2-len(SS)//2),SS,zeros(Nifft//2-len(SS)//2)])
@@ -159,9 +161,9 @@ class waveform():
         j=(span*Nifft-(span-1)*OLifft)
         self.sr4=interp(linspace(-i//2,i//2,len(self.s4),endpoint=False),arange(-Nfft*os//2,Nfft*os//2),sr)
         #______ Calculating MER
-        MER=10*log10(sum(abs(self.s4-self.sr4)**2)/sum(abs(self.sr4)**2)+1e-20)
+        MER=10*log10(sum(abs(self.s4-self.sr4)**2)+1e-20)
         #______ Plotting
-        if plotEn:
+        if self.plotEn:
             t4=t4-len(self.s3)//2
             L1b.set_data(t4,real(self.s4))
             L2d.set_data(interpFIR(int(OSfin*Nbw),Nifft,Nifft))
@@ -173,11 +175,11 @@ class waveform():
             ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
             fig.canvas.draw()
             #fig.canvas.flush_events()
+        return(MER)
 
     def RateConverter(self,t,s):
         y0=[]
         lenfar=len(far(0))
-        print(max(t),len(s))
         for j in roll(t,0):
             y0.append(s[arange(int(j)-1,int(j)+3)%len(s)]@far(j%1))
         return(roll(array(y0),0))
@@ -199,13 +201,13 @@ wf=waveform()
 Fc_h.on_changed(wf.calculate)
 
 
-Nfft_h.on_changed(wf.SweepFreq)
-Nifft_h.on_changed(wf.SweepFreq)
-Toff_h.on_changed(wf.SweepFreq)
-OS_h.on_changed(wf.SweepFreq)
-RollOff_h.on_clicked(wf.SweepFreq)
-OL_h.on_clicked(wf.SweepFreq)
-Wtype_h.on_clicked(wf.SweepFreq)
-mode_h.on_clicked(wf.SweepFreq)
+Nfft_h.on_changed(wf.calculate)
+Nifft_h.on_changed(wf.calculate)
+Toff_h.on_changed(wf.calculate)
+OS_h.on_changed(wf.calculate)
+RollOff_h.on_clicked(wf.calculate)
+OL_h.on_clicked(wf.calculate)
+Wtype_h.on_clicked(wf.calculate)
+mode_h.on_clicked(wf.calculate)
 
 show()
