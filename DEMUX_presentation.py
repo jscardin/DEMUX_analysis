@@ -54,9 +54,9 @@ FIRlen=512
 ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples')
 L1a,=ax1.plot([],[],'y.-',lw=1,label='real(Input Signal)')
 L1b,=ax1.plot([],[],'b.',lw=1,label='real(DEMUX output)')
-L1c=[ax1.plot([],[],'r',lw=1,label='FFT blocks')[0]]
+L1c=[ax1.plot([],[],'r--',lw=1,label='FFT blocks')[0]]
 for i in range(span-1):
-    L1c.append(ax1.plot([],[],'r',lw=1)[0])
+    L1c.append(ax1.plot([],[],'r--',lw=1)[0])
 ax1.legend(loc='upper right')
 ax1.grid()
 ax1.set_xlabel('IFFT TIME SAMPLES')
@@ -89,6 +89,7 @@ class waveform():
 
     def calculate(self,Fcs):
         #______ Extracting variables
+        Fcs=Fc_h.val
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
         Nbw=Nifft/OS_h.val
@@ -161,7 +162,7 @@ class waveform():
         j=(span*Nifft-(span-1)*OLifft)
         self.sr4=interp(linspace(-i//2,i//2,len(self.s4),endpoint=False),arange(-Nfft*os//2,Nfft*os//2),sr)
         #______ Calculating MER
-        MER=10*log10(sum(abs(self.s4-self.sr4)**2)+1e-20)
+        MER=(sum(abs(self.s4-self.sr4)**2),sum(abs(self.ww)**2))
         #______ Plotting
         if self.plotEn:
             t4=t4-len(self.s3)//2
@@ -169,7 +170,7 @@ class waveform():
             L2d.set_data(interpFIR(int(OSfin*Nbw),Nifft,Nifft))
             L1a.set_data(linspace(-j//2,j//2,len(self.sr4),endpoint=False),real(self.sr4))
             ax1.axis([-Nifft*os//2,Nifft*os//2,-1.5,1.5])
-            textMER.set_text('MER est.=%0.1f'%(MER))
+            textMER.set_text('MER est.=%0.1f'%(10*log10(MER[0]/MER[1]+1e-20)))
             L2c.set_data(fe,Fenv)
             ax2.set_xticks([-Nifft//2,-Nbw/2,Nbw/2,Nifft//2])
             ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
@@ -178,10 +179,10 @@ class waveform():
         return(MER)
 
     def RateConverter(self,t,s):
-        y0=[]
+        y0=zeros(len(t),'complex')
         lenfar=len(far(0))
-        for j in roll(t,0):
-            y0.append(s[arange(int(j)-1,int(j)+3)%len(s)]@far(j%1))
+        #for j in roll(t,0):
+        #    y0.append(s[arange(int(j)-1,int(j)+3)%len(s)]@far(j%1))
         return(roll(array(y0),0))
 #        return(interp(t,arange(len(s)),s))
     def RRCfilter(self,s,bw,ro):
