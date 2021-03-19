@@ -1,11 +1,11 @@
 from pylab import *
 from matplotlib import animation
 from matplotlib.widgets import Slider, Button, RadioButtons
+from quicktions import Fraction
 
 os=8   # oversampling for the entire simulation
 OSfin=4  #final oversampling
 span=7 # number of FFT frame, must be odd number
-up=16  # upsampling for rate converter FFT
 
 def rrc(N0,N01,N1):
     return(concatenate([zeros(N0),
@@ -43,7 +43,7 @@ fig=figure(num=1,clear=True)
 Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,12,'%d',valstep=1,orientation='vertical')
 Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
 OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,OSfin,2,'%0.2f',valstep=0.25,orientation='vertical')
-Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,2,'%0.1f',valstep=0.2,orientation='vertical')
+Fc_h           =Slider(axes([0.10,0.35,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
 Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-200,200,0,'%d',orientation='vertical',valstep=1)
 RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
 OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
@@ -83,14 +83,17 @@ class waveform():
 
     def SweepFreq(self,a):
         self.plotEn=False
+        
+        self.MERsweep=[]
         for f in arange(-100,100):
-            print(self.calculate(f))
+            self.MERsweep.append(self.calculate(f))
+        
         self.plotEn=True
 
 
     def calculate(self,Fcs):
         #______ Extracting variables
-        Fcs=Fc_h.val
+        #Fcs=Fc_h.val
         Nfft=int(2**Nfft_h.val)
         Nifft=int(2**Nifft_h.val)
         Nbw=Nifft/OS_h.val
@@ -150,20 +153,20 @@ class waveform():
  
         #______ Filter and interpolator
         t4=arange(0,len(self.s3),(Nifft/Nbw)/OSfin)    
-        t4=t4[:len(t4)//2*2]
+        #t4=t4[:len(t4)//2*2]
         if mode_h.value_selected=="FIR": #filter first then oversample
             self.s3=self.RRCfilter(self.s3,Nbw/Nifft,ro)
-            self.s4=self.RateConverter(self.s3,up,Nifft/Nbw*up/OSfin)
+            self.s4=self.RateConverter(self.s3)
         else: #oversample first then filter
-            self.s4=self.RateConverter(self.s3,up,Nifft/Nbw*up/OSfin)
+            self.s4=self.RateConverter(self.s3)
             self.s4=self.RRCfilter(self.s4,1/OSfin,ro)
         #______ Creating reference signal (sr4)
         sr=s*(abs(Fc)<Nbw/2)*self.ww
         i=(span*Nfft- (span-1)*OLfft)
         j=(span*Nifft-(span-1)*OLifft)
-        self.sr4=interp(linspace(-i//2,i//2,len(self.s4),endpoint=False),arange(-Nfft*os//2,Nfft*os//2),sr)
+        self.sr4=interp(linspace(-i/2,i/2,len(self.s4),endpoint=False),arange(-Nfft*os//2,Nfft*os//2),sr)
         #______ Calculating MER
-        MER=(sum(abs(self.s4-self.sr4)**2),sum(abs(self.ww)**2))
+        MER=mean(abs(self.s4-self.sr4)**2)
         #______ Plotting
         if self.plotEn:
             t4=t4-len(self.s3)//2
@@ -171,7 +174,7 @@ class waveform():
             L2d.set_data(interpFIR(int(OSfin*Nbw),Nifft,Nifft))
             L1a.set_data(linspace(-j//2,j//2,len(self.sr4),endpoint=False),real(self.sr4))
             ax1.axis([-Nifft*os//2,Nifft*os//2,-1.5,1.5])
-            textMER.set_text('MER est.=%0.1f'%(10*log10(MER[0]/MER[1]+1e-20)))
+            textMER.set_text('MER est.=%0.1f'%(10*log10(MER+1e-20)))
             L2c.set_data(fe,Fenv)
             ax2.set_xticks([-Nifft//2,-Nbw/2,Nbw/2,Nifft//2])
             ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
@@ -179,39 +182,45 @@ class waveform():
             #fig.canvas.flush_events()
         return(MER)
 
-    def IFFT_calc(self,Nifft):
-        fir=reshape(list(zip(*[far(i/up) for i in range(up,0,-1)])),[-1])
-        OLifft=int(2**Nifft*eval(OL_h.value_selected))
-        n=span*2**int(Nifft)-(span-1)*OLifft
-        self.FIR=fft(fftshift(concatenate([zeros(n*up//2-len(fir)//2),fir,zeros(n*up//2-len(fir)//2)])))    
-        self.calculate(0)
-    def RateConverter(self,s,up,dn):
-        y1=ifft(sum(reshape(tile(fft(s),up)*self.FIR,[int(round(dn)),-1]),0))/up*2
-        return(roll(array(y1),0))
+    def calc(self,a):
+        self.calculate(Fc_h.val)
+
+    def IFFT_calc(self,a):
+        Nifft=int(2**Nifft_h.val)
+        (self.up,self.dn)=Fraction(OSfin/OS_h.val).limit_denominator().as_integer_ratio()
+        fir=reshape(list(zip(*[far(i/self.up) for i in range(self.up,0,-1)])),[-1])
+        OLifft=int(Nifft*eval(OL_h.value_selected))
+        n=span*Nifft-(span-1)*OLifft
+        self.FIR=fft(fftshift(concatenate([zeros(n*self.up//2-len(fir)//2),fir,zeros(n*self.up//2-len(fir)//2)])))    
+        self.calculate(Fc_h.val)
+    def RateConverter(self,s):
+        s=tile(fft(s),self.up)*self.FIR
+        z=int(ceil(len(s)/self.dn))*self.dn-len(s)
+        ss=concatenate([s[:len(s)//2],zeros(z),s[-len(s)//2:]])
+        y1=ifft(sum(reshape(ss,[self.dn,-1]),0))/self.dn
+        #y1=y1[:int(len(y1)/2)*2]
+        return(y1)
     def RRCfilter(self,s,bw,ro):
             n=len(s)//2
             ss=roll(convolve(s,RRC(FIRlen,bw,ro,2),'same'),-1)
-            return(ss[-n+len(ss)//2:n+len(ss)//2]) #extract center part only if FIR too long
-    def button_pressed(self,Nifft):
-        ax1.axis([-2**Nifft*os//2,2**Nifft*os//2,-1.5,1.5])
-        fig.canvas.toolbar.update()
-        self.calculate(0)
+            return(ss)
+#            return(ss[-n+len(ss)//2:n+len(ss)//2]) #extract center part only if FIR too long
 
 wf=waveform()
 
 
-#fig.canvas.mpl_connect('button_press_event',wf.button_pressed)
+wf.IFFT_calc(0)
 
 Fc_h.on_changed(wf.calculate)
 
 
-Nfft_h.on_changed(wf.calculate)
+Nfft_h.on_changed(wf.calc)
 Nifft_h.on_changed(wf.IFFT_calc)
-Toff_h.on_changed(wf.calculate)
-OS_h.on_changed(wf.calculate)
-RollOff_h.on_clicked(wf.calculate)
-OL_h.on_clicked(wf.calculate)
-Wtype_h.on_clicked(wf.calculate)
-mode_h.on_clicked(wf.calculate)
+Toff_h.on_changed(wf.calc)
+OS_h.on_changed(wf.IFFT_calc)
+RollOff_h.on_clicked(wf.calc)
+OL_h.on_clicked(wf.calc)
+Wtype_h.on_clicked(wf.calc)
+mode_h.on_clicked(wf.calc)
 
 show()
