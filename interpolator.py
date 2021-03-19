@@ -22,11 +22,6 @@ ax2.plot(arange(len(s)),s,'.-')
 #______ calculate equivalent filter
 far=lambda mu:array([mu*(-0.5+mu/2),-mu/2-mu**2/2+1,mu*(1.5-mu/2),-mu/2+mu**2/2])
 far=lambda mu:array([1-mu,mu])
-fir=reshape(list(zip(*[far(i/u) for i in range(u,0,-1)])),[-1])
-FIR=fft(fftshift(concatenate([zeros(n*u//2-len(fir)//2),fir,zeros(n*u//2-len(fir)//2)])))
-FIRds=real(concatenate([FIR[-n*u//d//2:],FIR[:n*u//d//2]]))/u
-f=linspace(-u/d/2,u/d/2,n*u//d)
-ax1.plot(f,FIRds)
 
 #______ direct approach
 y0=[]
@@ -39,19 +34,23 @@ ax2.plot(arange(len(y0))*d/u+1,real(y0),'.-');
 
 
 #_____ upfirdn approach
-
-
-    
+fir=reshape(list(zip(*[far(i/u) for i in range(u,0,-1)])),[-1])
 y1=signal.upfirdn(fir,s,u,d)
 
 
+#_____ Frequency response
+FIR=fft(fftshift(concatenate([zeros(n*u//2-len(fir)//2),fir,zeros(n*u//2-len(fir)//2)])))
+FIRds=real(concatenate([FIR[-n*u//d//2:],FIR[:n*u//d//2]]))/u
+f=linspace(-u/d/2,u/d/2,n*u//d)
+ax1.plot(f,FIRds)
+
+
+#_____ FFT approach
 S=tile(fft(s),u)
 S*=FIR
-SS=zeros(len(S)//d,'complex')
-FIRacc=zeros(len(FIR)//d,'complex')
-for i in range(d):
-    SS+=S[i*len(S)//d:(i+1)*len(S)//d]
-    FIRacc+=FIR[i*len(FIR)//d:(i+1)*len(FIR)//d]
+SS=sum(reshape(S,[d,-1]),0)
+FIRacc=sum(reshape(FIR,[d,-1]),0)
+
 
 ax1.plot(linspace(-u/d/2,u/d/2,len(FIRacc)),real(fftshift(FIRacc))/u)
 #ax1.plot(linspace(-u/2,u/2,len(FIR)),real(fftshift(FIR)))

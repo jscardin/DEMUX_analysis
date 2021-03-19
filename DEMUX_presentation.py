@@ -5,6 +5,7 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 os=8   # oversampling for the entire simulation
 OSfin=4  #final oversampling
 span=7 # number of FFT frame, must be odd number
+up=16  # upsampling for rate converter FFT
 
 def rrc(N0,N01,N1):
     return(concatenate([zeros(N0),
@@ -26,11 +27,11 @@ def RRC(N,FBW,alpha,beta=0):
 far=lambda mu:array([1-mu,mu])
 far=lambda mu:array([mu*(-0.5+mu/2),-mu/2-mu**2/2+1,mu*(1.5-mu/2),-mu/2+mu**2/2])
 
-def interpFIR(u,d,n):
-    fir=reshape(list(zip(*[far(i/u) for i in range(u,0,-1)])),[-1])
-    FIR=fft(fftshift(concatenate([zeros(n*u//2-len(fir)//2),fir,zeros(n*u//2-len(fir)//2)])))
-    FIRds=real(concatenate([FIR[-n*u//d//2:],FIR[:n*u//d//2]]))/u
-    f=linspace(-u*n/d/2,u*n/d/2,len(FIRds))
+def interpFIR(up,d,n):
+    fir=reshape(list(zip(*[far(i/up) for i in range(up,0,-1)])),[-1])
+    FIR=fft(fftshift(concatenate([zeros(n*up//2-len(fir)//2),fir,zeros(n*up//2-len(fir)//2)])))
+    FIRds=real(concatenate([FIR[-n*up//d//2:],FIR[:n*up//d//2]]))/up
+    f=linspace(-up*n/d/2,up*n/d/2,len(FIRds))
     return(f,FIRds)
 
 
@@ -152,9 +153,9 @@ class waveform():
         t4=t4[:len(t4)//2*2]
         if mode_h.value_selected=="FIR": #filter first then oversample
             self.s3=self.RRCfilter(self.s3,Nbw/Nifft,ro)
-            self.s4=self.RateConverter(t4,self.s3)
+            self.s4=self.RateConverter(self.s3,up,Nifft/Nbw*up/OSfin)
         else: #oversample first then filter
-            self.s4=self.RateConverter(t4,self.s3)
+            self.s4=self.RateConverter(self.s3,up,Nifft/Nbw*up/OSfin)
             self.s4=self.RRCfilter(self.s4,1/OSfin,ro)
         #______ Creating reference signal (sr4)
         sr=s*(abs(Fc)<Nbw/2)*self.ww
@@ -178,13 +179,15 @@ class waveform():
             #fig.canvas.flush_events()
         return(MER)
 
-    def RateConverter(self,t,s):
-        y0=zeros(len(t),'complex')
-        lenfar=len(far(0))
-        #for j in roll(t,0):
-        #    y0.append(s[arange(int(j)-1,int(j)+3)%len(s)]@far(j%1))
-        return(roll(array(y0),0))
-#        return(interp(t,arange(len(s)),s))
+    def IFFT_calc(self,Nifft):
+        fir=reshape(list(zip(*[far(i/up) for i in range(up,0,-1)])),[-1])
+        OLifft=int(2**Nifft*eval(OL_h.value_selected))
+        n=span*2**int(Nifft)-(span-1)*OLifft
+        self.FIR=fft(fftshift(concatenate([zeros(n*up//2-len(fir)//2),fir,zeros(n*up//2-len(fir)//2)])))    
+        self.calculate(0)
+    def RateConverter(self,s,up,dn):
+        y1=ifft(sum(reshape(tile(fft(s),up)*self.FIR,[int(round(dn)),-1]),0))/up*2
+        return(roll(array(y1),0))
     def RRCfilter(self,s,bw,ro):
             n=len(s)//2
             ss=roll(convolve(s,RRC(FIRlen,bw,ro,2),'same'),-1)
@@ -203,7 +206,7 @@ Fc_h.on_changed(wf.calculate)
 
 
 Nfft_h.on_changed(wf.calculate)
-Nifft_h.on_changed(wf.calculate)
+Nifft_h.on_changed(wf.IFFT_calc)
 Toff_h.on_changed(wf.calculate)
 OS_h.on_changed(wf.calculate)
 RollOff_h.on_clicked(wf.calculate)
