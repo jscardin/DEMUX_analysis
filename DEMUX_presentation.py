@@ -28,7 +28,7 @@ def RRC1(N,FBW,alpha):
 #fig2,ax=subplots(1,num=2,clear=True)
 
 #fig,(a,ax1,ax2)=subplots(1,3,num=1,clear=True)
-fig=figure(num=1,clear=True)
+fig=figure(num=1,clear=True,facecolor='orange')
 
 Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,10,'%d',valstep=1,orientation='vertical')
 Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,7,'%d',valstep=1,orientation='vertical')
@@ -38,7 +38,7 @@ Toff_h         =Slider(axes([0.13,0.35,0.02,0.6]),'Time',-200,200,0,'%d',orienta
 RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
 OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
 Wtype_h  =RadioButtons(axes([0.01,0.01,.10,0.2]),('RECT OLdisc','BART OLadd','HANN OLadd','HANN OLdisc'),active=2)
-order_h   =RadioButtons(axes([0.11,0.11,.05,0.1]),('RC-FIR','FIR-RC'),active=1)
+order_h   =RadioButtons(axes([0.11,0.11,.05,0.1]),('RC-FIR','FIR-RC','MASK-RC'),active=1)
 RCtype_h   =RadioButtons(axes([0.11,0.01,.05,0.1]),('Linear','Farrow','FLAT'),active=2)
 
 
@@ -121,8 +121,15 @@ class waveform():
             if order_h.value_selected=="RC-FIR":  # select center BW only, fill with zeros outside
                 n=int(round(Nbw/2)*2)
                 SS=S[arange(-n//2,n//2)*os+N//2]
-            else:#Select whole range
-                SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]
+            elif order_h.value_selected=="FIR-RC":#Select whole range
+                n=int(round((Nifft-Nbw)/2))
+                SS=S[arange(-Nifft//2,Nifft//2)*os+N//2]*(rrc(0,n,Nifft-2*n))
+            elif order_h.value_selected=="MASK-RC":#apply RRC filter and RC compensation
+                n=int(round(Nbw/2*(1-ro)/(1+ro)))
+                nn=int(round(Nbw/2)*2)
+                f1=sqrt(rrc(0,(int(round(Nbw/2))-n),2*n))
+                f2=interp(arange(-nn//2,nn//2),linspace(-Nifft//2*self.up,Nifft//2*self.up,len(self.RCfir)),fftshift(self.up/self.RCfir))
+                SS=S[arange(-nn//2,nn//2)*os+N//2]*f1*f2
             if i==span//2 and plotEn: # plot Frequency domain if center FFT
                 L2a.set_data(f/os,real(S[f+N//2]))
                 L2b.set_data(arange(-len(SS)//2,len(SS)//2),real(SS))
@@ -140,8 +147,10 @@ class waveform():
         if order_h.value_selected=="RC-FIR": #filter first then oversample
             self.s4=self.RateConverter(self.s3)
             self.s4=self.s4*RRC1(len(self.s4),1/OSfin/(1+ro),ro)
-        else: #oversample first then filter
+        elif order_h.value_selected=="FIR-RC": #oversample first then filter
             self.s3=self.s3*RRC1(len(self.s3),Nbw/Nifft/(1+ro),ro)
+            self.s4=self.RateConverter(self.s3)
+        else: #oversample first then filter
             self.s4=self.RateConverter(self.s3)
         self.s4=ifft(self.s4)
         #______ Creating reference signal (sr4)
@@ -161,7 +170,7 @@ class waveform():
             f=arange(-len(self.s3)//2,len(self.s3)//2)
             L2d.set_data(f/len(self.s3)*Nifft,fftshift(self.RCfir)[f+len(self.RCfir)//2]/self.up)
             ax1.axis([-Nifft*os//2,Nifft*os//2,-1.5,1.5])
-            textMER.set_text('MER avg=%0.1fdB'%(self.MERtotal))  #,-10*log10(mean(err)+1e-20)))
+            textMER.set_text('MER avg=%0.1fdB   MER spot=%0.1f'%(wf.MERtotal,-10*log10(mean(err)+1e-20)))
             L2c.set_data(fe,Fenv)
             ax2.set_xticks([-Nifft//2,-Nbw/2,Nbw/2,Nifft//2])
             ax2.axis([-Nifft*0.6,Nifft*0.6,-0.5,1.5])
@@ -187,6 +196,7 @@ class waveform():
             fir=reshape(list(zip(*[far(i/self.up) for i in range(self.up,0,-1)])),[-1])
             self.RCfir=real(fft(fftshift(concatenate([zeros(n*self.up//2-len(fir)//2),fir,zeros(n*self.up//2-len(fir)//2)]))))  
         self.SweepFreq()
+        self.calculate(Fc_h.val)
     def RateConverter(self,s):
         s=tile(s,self.up)*self.RCfir
         z=int(ceil(len(s)/self.dn))*self.dn-len(s)
@@ -196,7 +206,7 @@ class waveform():
     def SweepFreq(self):
         MERfreq=[]
         N=500
-        F=linspace(-2**Nifft_h.val//2,2**Nifft_h.val//2,N)
+        F=linspace(-2**Nifft_h.val,2**Nifft_h.val,N)
         mm=array([])
         pp=0
         for f in F:
@@ -208,8 +218,22 @@ class waveform():
         L1c.set_data(t,-10*log10(mm/pp+1e-20)/100)
         self.MERtotal=-10*log10(mean(mm)/pp)
         L2e.set_data(F,MERfreq)
-        self.calculate(Fc_h.val)
-
+    def SweepOS(self):
+        OSrange=linspace(1,4,13)
+        figure(2);clf()
+        for ni in range(5,9):
+            print('____ Nifft=',2**ni)
+            Nifft_h.set_val(ni)
+            mer=[]
+            for o in OSrange:
+                OS_h.set_val(o)
+                self.SweepFreq()
+                mer.append(self.MERtotal)
+                print(o,self.MERtotal)
+            plot(OSrange,mer)
+        grid()
+        legend()
+            
 wf=waveform()
 
 
