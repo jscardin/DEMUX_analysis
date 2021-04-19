@@ -1,13 +1,16 @@
 from pylab import *
 from matplotlib import animation
-from matplotlib.widgets import Slider, Button, RadioButtons
+from matplotlib.widgets import Slider, Button, RadioButtons,TextBox
 from quicktions import Fraction
 
 os=12   # oversampling for the entire simulation
 OSfin=4  #final oversampling
-span=11 # number of FFT frame, must be odd number
+span=7 # number of FFT frame, must be odd number
 trim=0
+Nchan=3
 adj_ch_boost=0  # adjacent channel boost
+NpointFsweep=200 # number points in the frequency sweep.
+
 
 def rrc(N0,N01,N1):
     return(concatenate([zeros(N0),
@@ -16,36 +19,50 @@ def rrc(N0,N01,N1):
                         cos(linspace(0,pi,N01,endpoint=False))/2+0.5,
                         zeros(N0)]))
 
-#def RRC1(N,FBW,alpha):
-#    '''returns zero phase RRC impulse response
-#    '''
-#    n=int(round(N/2*FBW))
-#    z=int(round(n*alpha))
-#    H=concatenate([ones(n-z),sqrt((cos(linspace(0,pi,2*z,endpoint=False))+1)/2)])
-#    H=concatenate([H,zeros(N-2*len(H)+1),flipud(H[1:])])
-#    return(H)
-
-def RRC1(N,FIRlen,FBW,alpha):
-    t=arange(min(FIRlen,N-1)//2+1)*FBW+1e-10
+def RRC1(N,FIRlen,FBW,alpha,Beta=0):
+    n=int(min(FIRlen,N))//2
+    t=arange(-n,n+1)*FBW+1e-10
     Hf = FBW*(sin(pi*t*(1-alpha))+(4*alpha*t*cos(pi*t*(1+alpha))))/(pi*t*(1-(4*alpha*t)**2))
-    hf=concatenate([Hf,zeros(N-len(Hf)*2+1),flipud(Hf[1:])])
+    Hf*=kaiser(len(Hf),Beta)
+    hf=concatenate([Hf[-n-1:],zeros(N-len(Hf)),Hf[:n]])
     return(fft(hf/sum(hf)))
 
+#    
+#def RRC1(N,FIRlen,FBW,alpha):
+#    t=arange(min(FIRlen,N-1)//2+1)*FBW+1e-10
+#    Hf = FBW*(sin(pi*t*(1-alpha))+(4*alpha*t*cos(pi*t*(1+alpha))))/(pi*t*(1-(4*alpha*t)**2))
+#    hf=concatenate([Hf,zeros(N-len(Hf)*2+1),flipud(Hf[1:])])
+#    return(fft(hf/sum(hf)))
+
+#far=lambda mu:array([1-mu,mu])   # Linear interpolation
+far=lambda mu:array([mu*(-0.5+mu/2),-mu/2-mu**2/2+1,mu*(1.5-mu/2),-mu/2+mu**2/2]) #Farrow interpolation
+
+def interp_farrow(xx,yy):
+    y=[]
+    yy=concatenate([[yy[0]],yy,[yy[-1]]*2])  # to extrapolate
+    for x in xx:
+        y.append(far(x%1)@yy[int(x):int(x)+4])
+    return(array(y))
 
 
 
 if True:
     fig1=figure(num=1,clear=True,facecolor='orange')
-
-    Nfft_h         =Slider(axes([0.01,0.35,0.02,0.6]),'FFT',5,18,10,'%d',valstep=1,orientation='vertical')
-    Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,5,'%d',valstep=1,orientation='vertical')
-    OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,OSfin,2,'%0.2f',valstep=0.1,orientation='vertical')
-    FIRlen_h       =Slider(axes([0.10,0.35,0.02,0.6]),'FIR Len',1,500,31,'%d',orientation='vertical',valstep=2)
+    x=0.07;y=0.9;xx=0.05;yy=0.04;
+    Nfft_h         =TextBox(axes([x,y,xx,yy]),'FFT size 2^','11');y=y-yy
+    Nifft_h        =TextBox(axes([x,y,xx,yy]),'IFFT size 2^','6');y=y-yy
+    FIRlen_h       =TextBox(axes([x,y,xx,yy]),'FIRlen=','31');y=y-yy
+    PolyWidth_h    =TextBox(axes([x,y,xx,yy]),'Poly Width=','4');y=y-yy
+    OS_h           =TextBox(axes([x,y,xx,yy]),'Over Sample=','2');y=y-yy
+    RollOff_h      =TextBox(axes([x,y,xx,yy]),'RollOff=','5%');y=y-yy
+    RRCbeta_h      =TextBox(axes([x,y,xx,yy]),'RRCbeta=','0');y=y-yy
+    #Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,5,'%d',valstep=1,orientation='vertical')
+    #OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,OSfin,2,'%0.2f',valstep=0.1,orientation='vertical')
     Fc_h           =Slider(axes([0.13,0.35,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
-    RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
+    #RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
     OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
-    Wtype_h  =RadioButtons(axes([0.01,0.01,.10,0.2]),('RECT OLdisc','BART OLadd','HANN OLadd','HANN OLdisc'),active=2)
-    mode_h   =RadioButtons(axes([0.11,0.11,.05,0.1]),('RC-RRC','RC-FIR','POLY'),active=2)
+    Wtype_h  =RadioButtons(axes([0.01,0.05,.10,0.16]),('RECT OLdisc','BART OLadd','HANN OLadd','HANN OLdisc'),active=0)
+    mode_h   =RadioButtons(axes([0.11,0.11,.05,0.1]),('RC-RRC','RC-FIR','POLY','PERFECT'),active=0)
     #RCtype_h =RadioButtons(axes([0.11,0.01,.05,0.1]),('Linear','Farrow','FLAT'),active=1)
     
     ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples',fig=fig1)
@@ -78,15 +95,18 @@ class waveform():
     def __init__(self):
         self.recalc(0)
     def read_GUI(self):
-        self.Nfft=int(2**Nfft_h.val)
-        self.Nifft=int(2**Nifft_h.val)
-        self.OS=OS_h.val
+        self.Nfft=2**int(Nfft_h.text)
+        self.Nifft=2**int(Nifft_h.text)
+        self.OS=float(OS_h.text)
         self.OL=eval(OL_h.value_selected)
-        self.alpha=eval(RollOff_h.value_selected[:-1])/100
+        self.alpha=int(RollOff_h.text[:-1])/100
         self.Wtype=Wtype_h.value_selected
         self.mode=mode_h.value_selected
-        self.FIRlen=FIRlen_h.val       
-    def standalone(self,Nfft,Nifft,OS,OL,alpha,Wtype,mode,FIRlen):
+        self.FIRlen=int(FIRlen_h.text)
+        self.PolyWidth=int(PolyWidth_h.text)
+        self.RRCbeta=float(RRCbeta_h.text)
+    def standalone(self,Nfft,Nifft,OS,OL,alpha,Wtype,mode,FIRlen,PolyWidth,RRCbeta):
+        
         self.Nfft=Nfft
         self.Nifft=Nifft
         self.OS=OS
@@ -95,12 +115,14 @@ class waveform():
         self.Wtype=Wtype
         self.mode=mode
         self.FIRlen=FIRlen
+        self.PolyWidth=PolyWidth
+        self.RRCbeta=RRCbeta
         return(self.IFFT_calc(False))
         
     def calculate(self,Fc,plotEn=True):
         """ Extracting variables 
         """
-        Nbw=self.Nifft/self.OS
+        Nbw=self.Nifft/self.OS*(1+self.alpha)
         OLwin=int(self.Nfft*self.OL)
         OLfft=int(self.Nfft*self.OL)
         OLifft=int(self.Nifft*self.OL)
@@ -110,7 +132,7 @@ class waveform():
         """
         n=int(round(Nbw*os/2*(1-self.alpha)/(1+self.alpha)))
         Fir=sqrt(rrc(0,(int(round(Nbw*os/2))-n),2*n))
-        Fenv=concatenate([Fir*10**(adj_ch_boost/20),Fir*10**(adj_ch_boost/20),Fir,Fir*10**(adj_ch_boost/20),Fir*10**(adj_ch_boost/20),[0]])
+        Fenv=concatenate([tile(Fir*10**(adj_ch_boost/20),(Nchan-1)//2),Fir,tile(Fir*10**(adj_ch_boost/20),(Nchan-1)//2),[0]])
         fe=arange(len(Fenv))/os-(len(Fenv)-1)/2/os
         """ Creating main signal (s)
         """
@@ -163,16 +185,14 @@ class waveform():
         """
         self.s3=fft(self.s3)
         if   self.mode=="RC-RRC": #filter first then oversample
-            self.s4=self.RateConverter(self.s3)
-            self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin/(1+self.alpha),self.alpha)
+             self.s4=self.RateConverter(self.s3)
+             self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin,self.alpha,self.RRCbeta)  #(1+self.alpha)
         if   self.mode=="RC-FIR": #filter first then oversample
-            self.s4=self.RateConverter(self.s3)
-            f2=interp(linspace(-1,1,len(self.s4)),linspace(-self.up,self.up,len(self.RCfir)),fftshift(self.up/(self.RCfir+1e-20)))
-            self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin/(1+self.alpha),self.alpha)*fftshift(f2)
-        elif self.mode=="POLY": #oversample first then filter
-            #f2=interp(linspace(-1,1,len(self.s3)),linspace(-self.up,self.up,len(self.RCfir)),fftshift(self.up/self.RCfir))
-            #self.s3=self.s3*RRC1(len(self.s3),Nbw/self.Nifft/(1+self.alpha),self.alpha)#*fftshift(f2)
-            self.s4=self.RateConverter(self.s3)
+             self.s4=self.RateConverter(self.s3)
+             f2=interp(linspace(-1,1,len(self.s4)),linspace(-self.up,self.up,len(self.RCfir)),fftshift(self.up/(self.RCfir+1e-20)))
+             self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin,self.alpha,self.RRCbeta)*fftshift(f2)  #(1+self.alpha)
+        elif self.mode=="POLY" or self.mode=="PERFECT": #oversample first then filter
+             self.s4=self.RateConverter(self.s3)
         self.s4=ifft(self.s4)
         """ Creating reference signal (sr4)
         """
@@ -181,20 +201,14 @@ class waveform():
         self.sr4=interp(linspace(-i/2,i/2,len(self.s4),endpoint=False),arange(-self.Nfft*os//2,self.Nfft*os//2),sr)
         """ Calculating MER
         """
-        n=int(self.Nifft*OSfin/(self.Nifft/Nbw)*1)
+        n=int(self.Nifft*(1-self.OL)/self.OS*OSfin/2*(span-2))
         r=arange(-n,n)+len(self.s4)//2
         err=abs(self.s4[r]-self.sr4[r])**2
         """ Plotting
         """
-        t4=arange(0,len(self.s3),(self.Nifft/Nbw)/OSfin)-len(self.s3)//2
+        t4=linspace(-len(self.s3)//2,len(self.s3)//2,len(self.s4))
         p4=mean(abs(self.sr4[r])**2)
         if plotEn:
-            #N=16384
-            #G=(1+OLfft/(span*(self.Nfft-OLfft)))/len(wf.s4)
-            #L2a.set_data(linspace(-Nbw*OSfin/2,Nbw*OSfin/2,N,endpoint=False),fftshift(abs(fft(wf.sr4,N))*G))
-            #L2b.set_data(linspace(-Nbw*OSfin/2,Nbw*OSfin/2,N,endpoint=False),fftshift(abs(fft(wf.s4 ,N))*G))
-            #L2a.set_data([Fc,Fc],[sqrt(mean(abs(self.sr4[r])**2)),interp(Fc,fe,Fenv)])
-            #L2b.set_data(Fc,sqrt(mean(abs(self.s4[r])**2)))
             L1a.set_data(t4,real(self.sr4))
             L1b.set_data(t4,real(self.s4))
             f=arange(-len(self.s3)//2,len(self.s3)//2)
@@ -205,7 +219,6 @@ class waveform():
             ax2.set_xticks([-self.Nifft//2,-Nbw/2,Nbw/2,self.Nifft//2])
             ax2.axis([-self.Nifft*0.6,self.Nifft*0.6,-0.5,1.5])
             fig1.canvas.draw()
-            #fig1.canvas.flush_events()
         return(t4[r],err,p4)
     """_______________________________________________________________
     """
@@ -218,19 +231,22 @@ class waveform():
         return(y1)
     def IFFT_calc(self,PlotEn=True):
         OLifft=int(self.Nifft*self.OL)
-        n=int(span*self.Nifft-(span-1)*OLifft)
         (self.up,self.dn)=Fraction(OSfin/self.OS).limit_denominator().as_integer_ratio()
+        n=int(span*self.Nifft-(span-1)*OLifft)*self.up
         if self.mode=="POLY":
-            #self.RCfir=fftshift(concatenate([zeros(n*self.up//2-n//2-1),ones(n+2),zeros(n*self.up//2-n//2-1)]))*self.up     
-            self.RCfir=(RRC1(n*self.up,n*self.up,1/self.up/(1+self.alpha)/self.OS,self.alpha))*self.up
+            a=real(fftshift(ifft(RRC1(self.FIRlen,self.FIRlen,1/self.OS/self.PolyWidth,self.alpha,self.RRCbeta))))
+            #b=interp(      arange(len(a)*self.up//self.PolyWidth)/self.up*self.PolyWidth,arange(len(a)),a)
+            b=interp_farrow(arange(len(a)*self.up//self.PolyWidth)/self.up*self.PolyWidth,a)
+            c=concatenate([zeros(n//2-len(b)//2),b,zeros(n//2-len(b)//2)])*self.PolyWidth
+            self.RCfir=real(fft(fftshift(c)))
+        elif self.mode=='PERFECT':
+            self.RCfir=(RRC1(n,n,1/self.up/self.OS,self.alpha))*self.up
         else:
-            #far=lambda mu:array([1-mu,mu])   # Linear interpolation
-            far=lambda mu:array([mu*(-0.5+mu/2),-mu/2-mu**2/2+1,mu*(1.5-mu/2),-mu/2+mu**2/2]) #Farrow interpolation
             fir=reshape(list(zip(*[far(i/self.up) for i in range(self.up,0,-1)])),[-1])
-            self.RCfir=real(fft(fftshift(concatenate([zeros(n*self.up//2-len(fir)//2),fir,zeros(n*self.up//2-len(fir)//2)]))))  
+            self.RCfir=real(fft(fftshift(concatenate([zeros(n//2-len(fir)//2),fir,zeros(n//2-len(fir)//2)]))))  
 
         MERfreq=[]
-        Fsweep=linspace(-self.Nifft,self.Nifft,200)
+        Fsweep=linspace(-self.Nifft,self.Nifft,NpointFsweep)
         mm=array([])
         pp=0
         for Fc in Fsweep:
@@ -244,7 +260,7 @@ class waveform():
             L1c.set_data(t,-10*log10(mm/pp+1e-20)/100)
             L2c.set_data(Fsweep,MERfreq)
             textMERavg.set_text('MER avg=%0.1fdB'%(mer))
-        print('config: ',self.Nfft,self.Nifft,'%0.2f'%self.OS,self.OL,self.Wtype,self.alpha,self.mode,mer)
+        print('config: ',n,self.up,self.dn,mer,self.PolyWidth)
         return(mer)
     def recalc(self,a):
         self.read_GUI()
@@ -255,15 +271,16 @@ wf=waveform()
 
 Fc_h.on_changed(wf.calculate)
 
-FIRlen_h.on_changed(wf.recalc)
-Nfft_h.on_changed(wf.recalc)
-Nifft_h.on_changed(wf.recalc)
-OS_h.on_changed(wf.recalc)
-
-RollOff_h.on_clicked(wf.recalc)
-OL_h.on_clicked(wf.recalc)
+#FIRlen_h.on_submit(wf.recalc)
+#PolyWidth_h.on_submit(wf.recalc)
+#Nfft_h.on_submit(wf.recalc)
+#Nifft_h.on_submit(wf.recalc)
+#OS_h.on_submit(wf.recalc)
+#
+#RollOff_h.on_submit(wf.recalc)
+#OL_h.on_clicked(wf.recalc)
 Wtype_h.on_clicked(wf.recalc)
-mode_h.on_clicked(wf.recalc)
+#mode_h.on_clicked(wf.recalc)
 
 show()
 
