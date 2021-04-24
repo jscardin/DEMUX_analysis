@@ -4,7 +4,7 @@ from matplotlib.widgets import Slider, Button, RadioButtons,TextBox
 from quicktions import Fraction
 
 os=12   # oversampling for the entire simulation
-OSfin=4  #final oversampling
+OSfin=3  #final oversampling
 span=7 # number of FFT frame, must be odd number
 trim=0
 Nchan=3
@@ -49,21 +49,17 @@ def interp_farrow(xx,yy):
 if True:
     fig1=figure(num=1,clear=True,facecolor='orange')
     x=0.07;y=0.9;xx=0.05;yy=0.04;
-    Nfft_h         =TextBox(axes([x,y,xx,yy]),'FFT size 2^','11');y=y-yy
-    Nifft_h        =TextBox(axes([x,y,xx,yy]),'IFFT size 2^','6');y=y-yy
-    FIRlen_h       =TextBox(axes([x,y,xx,yy]),'FIRlen=','31');y=y-yy
+    Nfft_h         =TextBox(axes([x,y,xx,yy]),'FFT size 2^','12');y=y-yy
+    Nifft_h        =TextBox(axes([x,y,xx,yy]),'IFFT size 2^','10');y=y-yy
+    FIRlen_h       =TextBox(axes([x,y,xx,yy]),'FIRlen=','61');y=y-yy
     PolyWidth_h    =TextBox(axes([x,y,xx,yy]),'Poly Width=','4');y=y-yy
-    OS_h           =TextBox(axes([x,y,xx,yy]),'Over Sample=','2');y=y-yy
+    OS_h           =TextBox(axes([x,y,xx,yy]),'Over Sample=','2.5');y=y-yy
     RollOff_h      =TextBox(axes([x,y,xx,yy]),'RollOff=','5%');y=y-yy
     RRCbeta_h      =TextBox(axes([x,y,xx,yy]),'RRCbeta=','0');y=y-yy
-    #Nifft_h        =Slider(axes([0.04,0.35,0.02,0.6]),'IFFT',5,18,5,'%d',valstep=1,orientation='vertical')
-    #OS_h           =Slider(axes([0.07,0.35,0.02,0.6]),'OS',1,OSfin,2,'%0.2f',valstep=0.1,orientation='vertical')
     Fc_h           =Slider(axes([0.13,0.35,0.02,0.6]),'Freq',-100,100,0,'%0.1f',valstep=0.2,orientation='vertical')
-    #RollOff_h=RadioButtons(axes([0.01,0.21,.07,0.1]),('0%','5%','20%','35%'),active=1)
     OL_h     =RadioButtons(axes([0.08,0.21,.07,0.1]),('1/2','1/4','1/8','0'),active=1)
     Wtype_h  =RadioButtons(axes([0.01,0.05,.10,0.16]),('RECT OLdisc','BART OLadd','HANN OLadd','HANN OLdisc'),active=0)
     mode_h   =RadioButtons(axes([0.11,0.11,.05,0.1]),('RC-RRC','RC-FIR','POLY','PERFECT'),active=0)
-    #RCtype_h =RadioButtons(axes([0.11,0.01,.05,0.1]),('Linear','Farrow','FLAT'),active=1)
     
     ax1=subplot2grid((8,10),(0,1),rowspan=4,colspan=9,title='Time Domain Samples',fig=fig1)
     L1a,=ax1.plot([],[],'y.-',lw=1,ms=3,label='Expected')
@@ -163,7 +159,7 @@ class waveform():
             if plotEn:  L1d[i].set_data((t+offset)*self.Nifft/self.Nfft,wo[t+N//2])
             S=fftshift(fft(fftshift(w*roll(s,-offset))))/(self.Nfft-OLwin)
             if self.mode=='RC-RRC':  # select center BW only, fill with zeros outside
-                n=int(ceil(Nbw/2)+trim)*2
+                n=int(round(Nbw/2)+trim)*2
                 SS=S[arange(-n//2,n//2)*os+N//2]
             else:
                 n=int(round((self.Nifft-Nbw)/2))
@@ -189,8 +185,8 @@ class waveform():
              self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin,self.alpha,self.RRCbeta)  #(1+self.alpha)
         if   self.mode=="RC-FIR": #filter first then oversample
              self.s4=self.RateConverter(self.s3)
-             f2=interp(linspace(-1,1,len(self.s4)),linspace(-self.up,self.up,len(self.RCfir)),fftshift(self.up/(self.RCfir+1e-20)))
-             self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin,self.alpha,self.RRCbeta)*fftshift(f2)  #(1+self.alpha)
+             self.f2=interp(linspace(-1,1,len(self.s4)),linspace(-self.up,self.up,len(self.RCfir)),fftshift(self.up/(self.RCfir+1e-20)))
+             self.s4=self.s4*RRC1(len(self.s4),self.FIRlen,1/OSfin,self.alpha,self.RRCbeta)*fftshift(self.f2)  #(1+self.alpha)
         elif self.mode=="POLY" or self.mode=="PERFECT": #oversample first then filter
              self.s4=self.RateConverter(self.s3)
         self.s4=ifft(self.s4)
@@ -260,7 +256,7 @@ class waveform():
             L1c.set_data(t,-10*log10(mm/pp+1e-20)/100)
             L2c.set_data(Fsweep,MERfreq)
             textMERavg.set_text('MER avg=%0.1fdB'%(mer))
-        print('config: ',n,self.up,self.dn,mer,self.PolyWidth)
+        print('Nifft=%d OS=%g FIRlen=%g'%(self.Nifft,self.OS,self.FIRlen))
         return(mer)
     def recalc(self,a):
         self.read_GUI()
@@ -271,16 +267,16 @@ wf=waveform()
 
 Fc_h.on_changed(wf.calculate)
 
-#FIRlen_h.on_submit(wf.recalc)
-#PolyWidth_h.on_submit(wf.recalc)
-#Nfft_h.on_submit(wf.recalc)
-#Nifft_h.on_submit(wf.recalc)
-#OS_h.on_submit(wf.recalc)
-#
-#RollOff_h.on_submit(wf.recalc)
-#OL_h.on_clicked(wf.recalc)
+FIRlen_h.on_submit(wf.recalc)
+PolyWidth_h.on_submit(wf.recalc)
+Nfft_h.on_submit(wf.recalc)
+Nifft_h.on_submit(wf.recalc)
+OS_h.on_submit(wf.recalc)
+
+RollOff_h.on_submit(wf.recalc)
+OL_h.on_clicked(wf.recalc)
 Wtype_h.on_clicked(wf.recalc)
-#mode_h.on_clicked(wf.recalc)
+mode_h.on_clicked(wf.recalc)
 
 show()
 
